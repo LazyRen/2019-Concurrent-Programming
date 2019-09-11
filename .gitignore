@@ -1,0 +1,15 @@
+# Ignore all without extensions(Binary Files)
+*
+!*.*
+# Unignore all dirs
+!*/
+
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.vscode/
+
+# Executables
+*.exe
+*.out
+*.app
