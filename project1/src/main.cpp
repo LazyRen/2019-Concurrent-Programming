@@ -73,21 +73,6 @@ int main(int argc, char* argv[])
   }
   delete[] buffer;
 
-  // buffer = new unsigned char[TUPLE_SIZE];
-  // for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
-  //   size_t offset_r = key[cur_tuple].index * TUPLE_SIZE;
-  //   size_t offset_w = cur_tuple * TUPLE_SIZE;
-  //   size_t ret = pread(input_fd, buffer, TUPLE_SIZE, offset_r);
-  //   if (ret != TUPLE_SIZE) {
-  //     printf("error: failed to read tuple%d\n", key[cur_tuple].index);
-  //   }
-  //   ret = pwrite(output_fd, buffer, TUPLE_SIZE, offset_w);
-  //   if (ret != TUPLE_SIZE) {
-  //     printf("error: write output file at tuple%d\n", key[cur_tuple].index);
-  //   }
-  // }
-  // delete[] buffer;
-
   //free
   delete[] key;
   delete[] tmp_key;
