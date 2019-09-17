@@ -14,7 +14,7 @@ using namespace std;
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
 #define MAX_THREADS     (16)
-#define WRITE_THRESHOLD (1<<20)
+#define FILE_THRESHOLD (1<<20)
 
 class KEYTYPE {
 public:
