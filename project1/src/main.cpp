@@ -44,19 +44,8 @@ int main(int argc, char* argv[])
   th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
   // sort.
-  for (int i = 0; i < MAX_THREADS; i++) {
-    if (th[i].joinable()) {
-      try {
-        th[i].join();
-      } catch (const std::exception& ex) {
-        printf("pid%d catched error after sorted\n", i);
-      }
-    }
-  }
-#ifdef DEBUG
-  if (!isOrdered(0, total_tuples-1))
-    printKeys(0, total_tuples-1);
-#endif
+  th[MAX_THREADS-1].join();
+
   // open output file.
   int output_fd;
   output_fd = open(argv[2], O_RDWR | O_CREAT | O_TRUNC, 0777);
@@ -145,21 +134,10 @@ void mergeSort(int pid, int l, int r)
       }
       merge(l, m, r);
 #ifdef DEBUG
-      if (!isOrdered(l, r))
-        printf("FAILED %d merging! %d ~ %d\n", pid, l, r);
-      else
-        printf("%d merging! %d ~ %d\n", pid, l, r);
+      printf("%d merging! %d ~ %d\n", pid, l, r);
 #endif
     };
   }
-}
-
-bool isOrdered(int left, int right)
-{
-  for (int i = left; i < right; i++)
-    if (key[i].binary > key[i+1].binary)
-      return false;
-  return true;
 }
 
 void printKeys(int left, int right)

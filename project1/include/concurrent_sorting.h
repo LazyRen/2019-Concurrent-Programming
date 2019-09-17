@@ -8,12 +8,11 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
-#include <chrono>
 using namespace std;
 
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
-#define MAX_THREADS     (32)
+#define MAX_THREADS     (16)
 
 class KEYTYPE {
 public:
@@ -34,7 +33,6 @@ int key_per_thread;
 
 void merge(int left, int mid, int right);
 void mergeSort(int pid, int l, int r);
-bool isOrdered(int left, int right);
 void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
