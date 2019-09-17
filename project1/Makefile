@@ -4,27 +4,23 @@ CFLAGS = -Wall -g -O2
 
 # Macros specifying path for compile.
 SRCS := $(wildcard src/*.cpp)
-OBJS := $(SRCS:.c=.o)
 INC = ./include/
 LIB = ./lib/
 
 # Pre-Processor.
 CFLAGS += -std=c++14 -I$(INC) -L$(LIB) -lpthread
 
-
 TARGET = run
-
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) -o $(TARGET) $(OBJS) $(CFLAGS)
-
-
+$(TARGET): $(SRCS)
+	$(CC) -o $(TARGET) $(SRCS) $(CFLAGS)
 
 # Delete binary & object files
 clean:
 	$(RM) $(TARGET) $(OBJS)
+	$(RM) ./output_tiny_ascii.test ./output_tiny_skewed.test ./output_tiny.test
 
 test:
 	make
