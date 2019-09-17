@@ -16,11 +16,12 @@ int main(int argc, char* argv[])
   }
 
   // get size of input file.
-  const size_t file_size   = lseek(input_fd, 0, SEEK_END);
-  total_tuples   = file_size / TUPLE_SIZE;
-  key_per_thread = total_tuples / MAX_THREADS;
+  const size_t file_size = lseek(input_fd, 0, SEEK_END);
+  total_tuples    = file_size / TUPLE_SIZE;
+  key_per_thread  = total_tuples / MAX_THREADS;
   int last_thread = 0;
-  key.reserve(total_tuples);
+  key = new KEYTYPE[total_tuples];
+  tmp_key = new KEYTYPE[total_tuples];
   unsigned char *buffer = new unsigned char[KEY_SIZE];
 #ifdef DEBUG
   printf("file_size: %zu total_tuples: %d key_per thread: %d\n", file_size, total_tuples, key_per_thread);
@@ -32,8 +33,8 @@ int main(int argc, char* argv[])
     if (ret != KEY_SIZE) {
       printf("error: failed to read key%d\n", cur_tuple);
     }
-    key.push_back(KEYTYPE(buffer, cur_tuple));
-    tmp_key.push_back(KEYTYPE(buffer, cur_tuple));
+    key[cur_tuple].assign(buffer, cur_tuple);
+    tmp_key[cur_tuple].assign(buffer, cur_tuple);
     if (cur_tuple+1 >= (last_thread+1) * key_per_thread && last_thread < MAX_THREADS - 1) {
       th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, cur_tuple);
       // printf("%d: %d ~ %d\n", last_thread, last_thread * key_per_thread, cur_tuple);
@@ -55,20 +56,42 @@ int main(int argc, char* argv[])
   }
 
   // flush to output file.
-  buffer = new unsigned char[TUPLE_SIZE];
-  for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
-    size_t offset_r = key[cur_tuple].index * TUPLE_SIZE;
-    size_t offset_w = cur_tuple * TUPLE_SIZE;
-    size_t ret = pread(input_fd, buffer, TUPLE_SIZE, offset_r);
-    if (ret != TUPLE_SIZE) {
-      printf("error: failed to read tuple%d\n", key[cur_tuple].index);
+  int *converter = new int[total_tuples];
+  for (int i = 0; i < total_tuples; i++)
+    converter[key[i].index] = i;
+  buffer = new unsigned char[TUPLE_SIZE * WRITE_THRESHOLD];
+  for (size_t offset = 0; offset < file_size;) {
+    size_t ret = pread(input_fd, buffer, TUPLE_SIZE * WRITE_THRESHOLD, offset);
+    if (ret < 0) {
+      printf("error: read input file\n");
     }
-    ret = pwrite(output_fd, buffer, TUPLE_SIZE, offset_w);
-    if (ret != TUPLE_SIZE) {
-      printf("error: write output file at tuple%d\n", key[cur_tuple].index);
+    int start = offset / TUPLE_SIZE;
+    for (int i = 0; i < ret / TUPLE_SIZE; i++) {
+      pwrite(output_fd, buffer + i * TUPLE_SIZE, TUPLE_SIZE, converter[start+i] * TUPLE_SIZE);
     }
+    offset = offset + ret;
   }
   delete[] buffer;
+
+  // buffer = new unsigned char[TUPLE_SIZE];
+  // for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
+  //   size_t offset_r = key[cur_tuple].index * TUPLE_SIZE;
+  //   size_t offset_w = cur_tuple * TUPLE_SIZE;
+  //   size_t ret = pread(input_fd, buffer, TUPLE_SIZE, offset_r);
+  //   if (ret != TUPLE_SIZE) {
+  //     printf("error: failed to read tuple%d\n", key[cur_tuple].index);
+  //   }
+  //   ret = pwrite(output_fd, buffer, TUPLE_SIZE, offset_w);
+  //   if (ret != TUPLE_SIZE) {
+  //     printf("error: write output file at tuple%d\n", key[cur_tuple].index);
+  //   }
+  // }
+  // delete[] buffer;
+
+  //free
+  delete[] key;
+  delete[] tmp_key;
+  delete[] converter;
 
   // close input file.
   close(input_fd);
@@ -107,7 +130,7 @@ void merge(int left, int mid, int right)
 void mergeSort(int pid, int l, int r)
 {
   if (l < r) {
-    sort(key.begin() + l, key.begin() + r + 1);
+    sort(key + l, key + (r+1));
 #ifdef DEBUG
     printf("%d: %d ~ %d\n\n", pid, l, r);
 #endif
