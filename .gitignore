@@ -8,6 +8,8 @@
 *.sublime-project
 *.sublime-workspace
 .vscode/
+*.test
+*.dSYM
 
 # Executables
 *.exe
