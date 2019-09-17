@@ -4,6 +4,7 @@ CFLAGS = -Wall -g -O2
 
 # Macros specifying path for compile.
 SRCS := $(wildcard src/*.cpp)
+INCS := $(wildcard include/*.h)
 INC = ./include/
 LIB = ./lib/
 
@@ -14,7 +15,7 @@ TARGET = run
 
 all: $(TARGET)
 
-$(TARGET): $(SRCS)
+$(TARGET): $(SRCS) $(INCS)
 	$(CC) -o $(TARGET) $(SRCS) $(CFLAGS)
 
 # Delete binary & object files

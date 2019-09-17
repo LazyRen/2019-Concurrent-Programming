@@ -8,12 +8,13 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include <chrono>
 using namespace std;
 
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
-#define SPLIT_THRESHOLD (1<<10)
-#define MAX_THREADS     (100)
+#define SPLIT_THRESHOLD (1<<15)
+#define MAX_THREADS     (64)
 
 class KEYTYPE {
 public:
@@ -24,14 +25,24 @@ public:
     memcpy(this->binary, binary, KEY_SIZE);
     this->index = index;
   }
+
+  KEYTYPE& operator= (const KEYTYPE &k2) {
+  memcpy(this->binary, k2.binary, KEY_SIZE);
+  this->index = k2.index;
+  return *this;
+}
 };
 
 vector<KEYTYPE> key;
 vector<KEYTYPE> tmp_key;
 thread th[MAX_THREADS];
+int total_tuples;
+int key_per_thread;
 
 void merge(int left, int mid, int right);
-void mergeSort(int l, int r);
+void mergeSort(int pid, int l, int r);
+bool isOrdered(int left, int right);
+void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
 {
