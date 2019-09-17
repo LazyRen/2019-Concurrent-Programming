@@ -24,12 +24,6 @@ public:
     memcpy(this->binary, binary, KEY_SIZE);
     this->index = index;
   }
-
-  KEYTYPE& operator= (const KEYTYPE &k2) {
-  memcpy(this->binary, k2.binary, KEY_SIZE);
-  this->index = k2.index;
-  return *this;
-}
 };
 
 vector<KEYTYPE> key;
