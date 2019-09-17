@@ -1,65 +1,4 @@
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <fcntl.h>
-#include <string>
-#include <thread>
-#include <unistd.h>
-#include <utility>
-#include <vector>
-using namespace std;
-
-#define KEY_SIZE        (10)
-#define TUPLE_SIZE      (100)
-#define SPLIT_THRESHOLD (1<<10)
-#define MAX_THREADS     (100)
-
-class KEYTYPE {
-public:
-  unsigned char binary[KEY_SIZE];
-  int index;
-
-  KEYTYPE(unsigned char* binary, int index) {
-    memcpy(this->binary, binary, KEY_SIZE);
-    this->index = index;
-  }
-
-  bool operator< (const KEYTYPE &other) {
-    int cmp = memcmp(this->binary, other.binary, KEY_SIZE);
-    if (cmp < 0)
-      return true;
-    return false;
-  }
-
-  bool operator<= (const KEYTYPE &other) {
-    int cmp = memcmp(this->binary, other.binary, KEY_SIZE);
-    if (cmp <= 0)
-      return true;
-    return false;
-  }
-
-  bool operator> (const KEYTYPE &other) {
-    int cmp = memcmp(this->binary, other.binary, KEY_SIZE);
-    if (cmp > 0)
-      return true;
-    return false;
-  }
-
-  bool operator>= (const KEYTYPE &other) {
-    int cmp = memcmp(this->binary, other.binary, KEY_SIZE);
-    if (cmp >= 0)
-      return true;
-    return false;
-  }
-};
-
-vector<KEYTYPE> key;
-vector<KEYTYPE> tmp_key;
-thread th[MAX_THREADS];
-
-// inline bool cmp(const string &a, const string &b);
-void merge(int left, int mid, int right);
-void mergeSort(int l, int r);
+#include "concurrent_sorting.h"
 
 int main(int argc, char* argv[])
 {
@@ -91,14 +30,6 @@ int main(int argc, char* argv[])
       printf("error: failed to read key%d\n", cur_tuple);
     }
     key.push_back(KEYTYPE(buffer, cur_tuple));
-    // for (int i = 0; i < KEY_SIZE; i++) {
-    //   printf("%x", buffer[i]);
-    // }
-    // printf(" vs ");
-    // for (int i = 0; i < KEY_SIZE; i++) {
-    //   printf("%x", key[cur_tuple].binary[i]);
-    // }
-    // printf("\n");
   }
   tmp_key = key;
   delete[] buffer;
@@ -138,11 +69,6 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-// inline bool cmp(const string &a, const string &b)
-// {
-
-// }
-
 void merge(int left, int mid, int right)
 {
   int l = left;
@@ -169,22 +95,15 @@ void merge(int left, int mid, int right)
 void mergeSort(int l, int r)
 {
   if (l < r) {
+    if (r - l < SPLIT_THRESHOLD) {
+      sort(key.begin() + l, key.begin() + r + 1);
+    } else {
+      int m = l + (r - l) / 2;
 
-    int m = l + (r - l) / 2;
+      mergeSort(l, m);
+      mergeSort(m + 1, r);
 
-    mergeSort(l, m);
-    mergeSort(m + 1, r);
-
-    merge(l, m, r);
-    // if (r - l < SPLIT_THRESHOLD) {
-    //   sort(key.begin() + l, key.begin() + r + 1);
-    // } else {
-    //   int m = l + (r - l) / 2;
-
-    //   mergeSort(l, m);
-    //   mergeSort(m + 1, r);
-
-    //   merge(l, m, r);
-    // }
+      merge(l, m, r);
+    }
   }
 }

@@ -3,6 +3,7 @@
 !*.*
 # Unignore all dirs
 !*/
+!Makefile
 
 .DS_Store
 *.sublime-project
