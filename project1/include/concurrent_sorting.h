@@ -13,8 +13,7 @@ using namespace std;
 
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
-#define SPLIT_THRESHOLD (1<<15)
-#define MAX_THREADS     (64)
+#define MAX_THREADS     (32)
 
 class KEYTYPE {
 public:

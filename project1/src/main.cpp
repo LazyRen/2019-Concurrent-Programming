@@ -53,8 +53,10 @@ int main(int argc, char* argv[])
       }
     }
   }
+#ifdef DEBUG
   if (!isOrdered(0, total_tuples-1))
     printKeys(0, total_tuples-1);
+#endif
   // open output file.
   int output_fd;
   output_fd = open(argv[2], O_RDWR | O_CREAT | O_TRUNC, 0777);
@@ -95,7 +97,6 @@ void merge(int left, int mid, int right)
 
   while (l <= mid && r <= right)
   {
-    // printf("l: %d r: %d s: %d\n", l, r, s);
     if (key[l] <= key[r])
       tmp_key[s++] = key[l++];
     else
@@ -118,22 +119,10 @@ void mergeSort(int pid, int l, int r)
 {
   if (l < r) {
     sort(key.begin() + l, key.begin() + r + 1);
-    // if (r - l < SPLIT_THRESHOLD) {
-    //   sort(key.begin() + l, key.begin() + r + 1);
-    // }
-    // else {
-    //   int m = l + (r - l) / 2;
-
-    //   mergeSort(-1, l, m);
-    //   mergeSort(-1, m+1, r);
-
-    //   merge(l, m, r);
-    // }
 #ifdef DEBUG
     printf("%d: %d ~ %d\n\n", pid, l, r);
 #endif
   }
-  // this_thread::sleep_for(chrono::seconds(pid));
 
   for (int div = 2; div <= MAX_THREADS; div *= 2) {
     if (pid % div == div - 1) {
