@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   unsigned char *buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
-  for (int total_read = 0; total_read < file_size;) {
+  for (size_t total_read = 0; total_read < file_size;) {
     int last_inserted = total_read/TUPLE_SIZE - 1;
     last_inserted = last_inserted == -1 ? 0 : last_inserted;
     size_t ret = pread(input_fd, buffer, TUPLE_SIZE * FILE_THRESHOLD, total_read);
@@ -38,7 +38,7 @@ int main(int argc, char* argv[])
       tmp_key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
     }
     total_read += ret;
-    for (; last_thread < (total_read/key_per_thread) && last_thread < MAX_THREADS - 1; last_thread++) {
+    for (; last_thread < ((total_read/100)/key_per_thread) && last_thread < MAX_THREADS - 1; last_thread++) {
       th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread,
                                (last_thread+1) * key_per_thread - 1);
     }
@@ -49,6 +49,7 @@ int main(int argc, char* argv[])
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
+  printf("last_thread: %d\n", last_thread);
 #endif
   mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
