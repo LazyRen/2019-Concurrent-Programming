@@ -47,10 +47,11 @@ int main(int argc, char* argv[])
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
-  th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
+//  th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
+  mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
 
-  th[MAX_THREADS-1].join();
+//  th[MAX_THREADS-1].join();
 #ifdef DEBUG
   auto stop1 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop1 - stop);
