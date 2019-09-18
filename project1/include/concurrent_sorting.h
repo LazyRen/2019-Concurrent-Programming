@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
-#ifdef DEBUG
+#ifdef VERBOSE
 #include <chrono>
 #include <iostream>
 using namespace std::chrono;
@@ -19,7 +19,7 @@ using namespace std;
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
 #define MAX_THREADS     (16)
-#define FILE_THRESHOLD (1<<20)
+#define FILE_THRESHOLD (1<<23)
 
 class KEYTYPE {
 public:

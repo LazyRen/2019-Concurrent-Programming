@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
   for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
     pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
     if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
-      last_inserted = pwrite(output_fd, buffer, cur * TUPLE_SIZE, last_inserted);
+      last_inserted = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, last_inserted);
       cur = 0;
     }
   }
