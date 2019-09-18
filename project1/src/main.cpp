@@ -27,13 +27,11 @@ int main(int argc, char* argv[])
   printf("file_size: %zu total_tuples: %d key_per thread: %d\n", file_size, total_tuples, key_per_thread);
   auto start = high_resolution_clock::now();
 #endif
-  // read data from input file
+
+  // read data from input file & start sorting
   for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
     size_t offset = cur_tuple * TUPLE_SIZE;
     size_t ret = pread(input_fd, buffer, KEY_SIZE, offset);
-    if (ret != KEY_SIZE) {
-      printf("error: failed to read key%d\n", cur_tuple);
-    }
     key[cur_tuple].assign(buffer, cur_tuple);
     tmp_key[cur_tuple].assign(buffer, cur_tuple);
     if (cur_tuple+1 >= (last_thread+1) * key_per_thread && last_thread < MAX_THREADS - 1) {
@@ -42,16 +40,15 @@ int main(int argc, char* argv[])
     }
   }
   delete[] buffer;
+
 #ifdef DEBUG
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
-//  th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
   mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
-
-//  th[MAX_THREADS-1].join();
+  delete[] tmp_key;
 #ifdef DEBUG
   auto stop1 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop1 - stop);
@@ -67,47 +64,25 @@ int main(int argc, char* argv[])
   }
 
   // flush to output file.
-  // int *converter = new int[total_tuples];
-  // for (int i = 0; i < total_tuples; i++)
-  //   converter[key[i].index] = i;
-  // buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
-  // for (size_t offset = 0; offset < file_size;) {
-  //   size_t ret = pread(input_fd, buffer, TUPLE_SIZE * FILE_THRESHOLD, offset);
-  //   if (ret < 0) {
-  //     printf("error: read input file\n");
-  //   }
-  //   int start = offset / TUPLE_SIZE;
-  //   for (int i = 0; i < ret / TUPLE_SIZE; i++) {
-  //     pwrite(output_fd, buffer + i * TUPLE_SIZE, TUPLE_SIZE, converter[start+i] * TUPLE_SIZE);
-  //   }
-  //   offset = offset + ret;
-  // }
-  // delete[] buffer;
-  // delete[] converter;
-
-  buffer = new unsigned char[TUPLE_SIZE];
-  for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
-    size_t offset_r = key[cur_tuple].index * TUPLE_SIZE;
-    size_t offset_w = cur_tuple * TUPLE_SIZE;
-    size_t ret = pread(input_fd, buffer, TUPLE_SIZE, offset_r);
-    if (ret != TUPLE_SIZE) {
-      printf("error: failed to read tuple%d\n", key[cur_tuple].index);
-    }
-    ret = pwrite(output_fd, buffer, TUPLE_SIZE, offset_w);
-    if (ret != TUPLE_SIZE) {
-      printf("error: write output file at tuple%d\n", key[cur_tuple].index);
+  buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
+  for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
+    int max_buffer_tuple = FILE_THRESHOLD;
+    size_t ret = pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
+    if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
+      last_inserted = pwrite(output_fd, buffer, cur * TUPLE_SIZE, last_inserted);
+      cur = 0;
     }
   }
+  delete[] buffer;
+
 #ifdef DEBUG
   auto stop2 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop2 - stop1);
   cout << "file writing took " << duration.count() << "ms\n";
 #endif
-  delete[] buffer;
 
   //free
   delete[] key;
-  delete[] tmp_key;
 
   // close input file.
   close(input_fd);
