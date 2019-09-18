@@ -44,7 +44,7 @@ int main(int argc, char* argv[])
   delete[] buffer;
 #ifdef DEBUG
   auto stop = high_resolution_clock::now();
-  auto duration = duration_cast<microseconds>(stop - start);
+  auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
   th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
@@ -53,7 +53,7 @@ int main(int argc, char* argv[])
   th[MAX_THREADS-1].join();
 #ifdef DEBUG
   auto stop1 = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop1 - stop);
+  duration = duration_cast<milliseconds>(stop1 - stop);
   cout << "last thread sorting took " << duration.count() << "ms\n";
 #endif
 
@@ -99,7 +99,7 @@ int main(int argc, char* argv[])
   }
 #ifdef DEBUG
   auto stop2 = high_resolution_clock::now();
-  duration = duration_cast<microseconds>(stop2 - stop1);
+  duration = duration_cast<milliseconds>(stop2 - stop1);
   cout << "file writing took " << duration.count() << "ms\n";
 #endif
   delete[] buffer;
