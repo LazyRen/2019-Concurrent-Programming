@@ -23,7 +23,7 @@ int main(int argc, char* argv[])
   key = new KEYTYPE[total_tuples];
   tmp_key = new KEYTYPE[total_tuples];
   unsigned char *buffer = new unsigned char[KEY_SIZE];
-#ifdef DEBUG
+#ifdef VERBOSE
   printf("file_size: %zu total_tuples: %d key_per thread: %d\n", file_size, total_tuples, key_per_thread);
   auto start = high_resolution_clock::now();
 #endif
@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
   }
   delete[] buffer;
 
-#ifdef DEBUG
+#ifdef VERBOSE
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
@@ -49,7 +49,7 @@ int main(int argc, char* argv[])
   mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
   delete[] tmp_key;
-#ifdef DEBUG
+#ifdef VERBOSE
   auto stop1 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop1 - stop);
   cout << "last thread sorting took " << duration.count() << "ms\n";
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
   }
   delete[] buffer;
 
-#ifdef DEBUG
+#ifdef VERBOSE
   auto stop2 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop2 - stop1);
   cout << "file writing took " << duration.count() << "ms\n";
