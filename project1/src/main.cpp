@@ -22,21 +22,25 @@ int main(int argc, char* argv[])
   int last_thread = 0;
   key = new KEYTYPE[total_tuples];
   tmp_key = new KEYTYPE[total_tuples];
-  unsigned char *buffer = new unsigned char[KEY_SIZE];
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %d key_per thread: %d\n", file_size, total_tuples, key_per_thread);
   auto start = high_resolution_clock::now();
 #endif
 
   // read data from input file & start sorting
-  for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
-    size_t offset = cur_tuple * TUPLE_SIZE;
-    pread(input_fd, buffer, KEY_SIZE, offset);
-    key[cur_tuple].assign(buffer, cur_tuple);
-    tmp_key[cur_tuple].assign(buffer, cur_tuple);
-    if (cur_tuple+1 >= (last_thread+1) * key_per_thread && last_thread < MAX_THREADS - 1) {
-      th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, cur_tuple);
-      last_thread++;
+  unsigned char *buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
+  for (int total_read = 0; total_read < file_size;) {
+    int last_inserted = total_read/TUPLE_SIZE - 1;
+    last_inserted = last_inserted == -1 ? 0 : last_inserted;
+    size_t ret = pread(input_fd, buffer, TUPLE_SIZE * FILE_THRESHOLD, total_read);
+    for (int i = 0; i < ret / TUPLE_SIZE; i++) {
+      key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
+      tmp_key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
+    }
+    total_read += ret;
+    for (; last_thread < (total_read/key_per_thread) && last_thread < MAX_THREADS - 1; last_thread++) {
+      th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread,
+                               (last_thread+1) * key_per_thread - 1);
     }
   }
   delete[] buffer;
@@ -68,7 +72,8 @@ int main(int argc, char* argv[])
   for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
     pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
     if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
-      last_inserted = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, last_inserted);
+      size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, last_inserted);
+      last_inserted += ret;
       cur = 0;
     }
   }
