@@ -25,6 +25,7 @@ int main(int argc, char* argv[])
   unsigned char *buffer = new unsigned char[KEY_SIZE];
 #ifdef DEBUG
   printf("file_size: %zu total_tuples: %d key_per thread: %d\n", file_size, total_tuples, key_per_thread);
+  auto start = high_resolution_clock::now();
 #endif
   // read data from input file
   for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
@@ -41,10 +42,20 @@ int main(int argc, char* argv[])
     }
   }
   delete[] buffer;
+#ifdef DEBUG
+  auto stop = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(stop - start);
+  cout << "read & sort took " << duration.count() << "ms\n";
+#endif
   th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
 
   th[MAX_THREADS-1].join();
+#ifdef DEBUG
+  auto stop1 = high_resolution_clock::now();
+  duration = duration_cast<microseconds>(stop1 - stop);
+  cout << "last thread sorting took " << duration.count() << "ms\n";
+#endif
 
   // open output file.
   int output_fd;
@@ -86,6 +97,11 @@ int main(int argc, char* argv[])
       printf("error: write output file at tuple%d\n", key[cur_tuple].index);
     }
   }
+#ifdef DEBUG
+  auto stop2 = high_resolution_clock::now();
+  duration = duration_cast<microseconds>(stop2 - stop1);
+  cout << "file writing took " << duration.count() << "ms\n";
+#endif
   delete[] buffer;
 
   //free
@@ -116,23 +132,15 @@ void merge(int left, int mid, int right)
 
   int tmp = l > mid ? r : l;
 
-  while(s <= right)
-    tmp_key[s++] = key[tmp++];
+  memcpy(tmp_key+s, key+tmp, (right-s+1)*sizeof(KEYTYPE));
 
-  for (int i = left; i <= right; i++)
-    key[i] = tmp_key[i];
-#ifdef DEBUG
-  printKeys(left, right);
-#endif
+  copy(tmp_key+left, tmp_key+right+1, key+left);
 }
 
 void mergeSort(int pid, int l, int r)
 {
   if (l < r) {
     sort(key + l, key + (r+1));
-#ifdef DEBUG
-    printf("%d: %d ~ %d\n\n", pid, l, r);
-#endif
   }
 
   for (int div = 2; div <= MAX_THREADS; div *= 2) {
@@ -155,9 +163,6 @@ void mergeSort(int pid, int l, int r)
         l = key_per_thread * (pid+1 - div);
       }
       merge(l, m, r);
-#ifdef DEBUG
-      printf("%d merging! %d ~ %d\n", pid, l, r);
-#endif
     };
   }
 }

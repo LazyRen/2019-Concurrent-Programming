@@ -1,6 +1,5 @@
 # Compiler and Compile options.
 CC = g++
-CFLAGS = -Wall -g -O2
 
 # Macros specifying path for compile.
 SRCS := $(wildcard src/*.cpp)
@@ -8,10 +7,8 @@ INCS := $(wildcard include/*.h)
 INC = ./include/
 LIB = ./lib/
 
-# Pre-Processor.
-CFLAGS += -std=c++14 -I$(INC) -L$(LIB) -lpthread
-
 TARGET = run
+override CFLAGS += -Wall -g -O2 -std=c++14 -I$(INC) -L$(LIB) -lpthread
 
 all: $(TARGET)
 

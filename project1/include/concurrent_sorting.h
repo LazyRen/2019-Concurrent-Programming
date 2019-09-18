@@ -9,6 +9,11 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#ifdef DEBUG
+#include <chrono>
+#include <iostream>
+using namespace std::chrono;
+#endif
 using namespace std;
 
 #define KEY_SIZE        (10)
