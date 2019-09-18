@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
   // read data from input file & start sorting
   for (int cur_tuple = 0; cur_tuple < total_tuples; cur_tuple++) {
     size_t offset = cur_tuple * TUPLE_SIZE;
-    size_t ret = pread(input_fd, buffer, KEY_SIZE, offset);
+    ret = pread(input_fd, buffer, KEY_SIZE, offset);
     key[cur_tuple].assign(buffer, cur_tuple);
     tmp_key[cur_tuple].assign(buffer, cur_tuple);
     if (cur_tuple+1 >= (last_thread+1) * key_per_thread && last_thread < MAX_THREADS - 1) {
@@ -66,8 +66,7 @@ int main(int argc, char* argv[])
   // flush to output file.
   buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
   for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
-    int max_buffer_tuple = FILE_THRESHOLD;
-    size_t ret = pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
+    ret = pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
     if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
       last_inserted = pwrite(output_fd, buffer, cur * TUPLE_SIZE, last_inserted);
       cur = 0;
