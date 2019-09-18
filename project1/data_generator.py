@@ -15,9 +15,9 @@ def runTest(outputFile, totalTuple):
     with open(outputFile, 'w') as writeFile:
         for t in dataList:
             writeFile.write(t.key + t.payload + '\n')
-    print("writing to " + outputFile + "is done\n")
+    print("writing to " + outputFile + " is done\n")
 
 
 if __name__ == "__main__":
-    runTest("input_1GB.test", (int)((1024**3)/100))
-    runTest("input_2GB.test", (int)(2*(1024**3)/100))
+    runTest("input_1GB.test", (int)((10**9)/100))
+    runTest("input_2GB.test", (int)(2*(10**9)/100))
