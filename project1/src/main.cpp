@@ -64,6 +64,7 @@ int main(int argc, char* argv[])
     printf("error: open output file\n");
     return 0;
   }
+  ftruncate(output_fd, file_size);
 
   // flush to output file.
   for (int i = 0; i < MAX_THREADS - 1; i++)
@@ -152,8 +153,8 @@ void parallelWrite(int input_fd, int output_fd, int start, int end)
 {
   int buf_size = min(FILE_THRESHOLD, end - start);
   unsigned char *buffer = new unsigned char[TUPLE_SIZE * buf_size];
-  for (int i = 0, cur = 0, last_inserted = 0; i < end - start; i++, cur++) {
-    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[start+i].index * TUPLE_SIZE);
+  for (int i = start, cur = 0, last_inserted = 0; i < end; i++, cur++) {
+    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
     if (cur == buf_size - 1 || i == end - 1) {
       size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, start * TUPLE_SIZE + last_inserted);
       last_inserted += ret;
