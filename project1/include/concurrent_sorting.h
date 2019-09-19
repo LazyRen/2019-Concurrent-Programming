@@ -48,7 +48,7 @@ int key_per_thread;
 void merge(int left, int mid, int right);
 void mergeSort(int pid, int l, int r);
 void parallelRead(int pid, int input_fd, size_t start, size_t end);
-void parallelWrite(int pid, int input_fd, int output_fd, int start, int end);
+void parallelWrite(int pid, int input_fd, int output_fd, size_t start, size_t end);
 void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)

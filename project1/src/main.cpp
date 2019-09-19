@@ -153,12 +153,12 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
   mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
 }
 
-void parallelWrite(int pid, int input_fd, int output_fd, int start, int end)
+void parallelWrite(int pid, int input_fd, int output_fd, size_t start, size_t end)
 {
-  int buf_size = min(FILE_THRESHOLD, end - start);
+  size_t buf_size = min(static_cast<size_t>FILE_THRESHOLD, end - start);
   unsigned char *buffer = new unsigned char[buf_size * TUPLE_SIZE];
-  for (int i = start, cur = 0, last_inserted = 0; i < end; i++, cur++) {
-    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
+  for (size_t i = start, cur = 0, last_inserted = 0; i < end; i++, cur++) {
+    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, static_cast<size_t>(key[i].index) * TUPLE_SIZE);
     if (cur == buf_size - 1 || i == end - 1) {
       size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, start * TUPLE_SIZE + last_inserted);
       last_inserted += ret;
