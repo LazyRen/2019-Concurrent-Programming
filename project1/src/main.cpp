@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
 #endif
 
   // read data from input file & start sorting
-  for (int i = 0; i < MAX_THREADS - 1; i++) {
+  for (size_t i = 0; i < MAX_THREADS - 1; i++) {
     th[i] = thread(parallelRead, i, input_fd,
                    i * key_per_thread * TUPLE_SIZE, (i+1) * key_per_thread * TUPLE_SIZE);
   }
