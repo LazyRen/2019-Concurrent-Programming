@@ -66,8 +66,8 @@ int main(int argc, char* argv[])
   }
 
 #ifdef VERBOSE
-  auto stop2 = high_resolution_clock::now();
-  duration = duration_cast<milliseconds>(stop2 - stop1);
+  auto stop1 = high_resolution_clock::now();
+  duration = duration_cast<milliseconds>(stop1 - stop);
   cout << "file writing took " << duration.count() << "ms\n";
 #endif
 
