@@ -18,8 +18,8 @@ using namespace std;
 
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
-#define MAX_THREADS     (32)
-#define FILE_THRESHOLD  (1<<19)
+#define MAX_THREADS     (16)
+#define FILE_THRESHOLD  (1<<20)
 
 class KEYTYPE {
 public:
@@ -47,7 +47,8 @@ int key_per_thread;
 
 void merge(int left, int mid, int right);
 void mergeSort(int pid, int l, int r);
-void parallelWrite(int input_fd, int output_fd, int start, int end);
+void parallelRead(int pid, int input_fd, size_t start, size_t end);
+void parallelWrite(int pid, int input_fd, int output_fd, int start, int end);
 void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
