@@ -18,7 +18,6 @@ int main(int argc, char* argv[])
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
   total_tuples    = file_size / TUPLE_SIZE;
   key_per_thread  = total_tuples / MAX_THREADS;
-  unsigned int last_thread = 0;
   key = new KEYTYPE[total_tuples];
   tmp_key = new KEYTYPE[total_tuples];
 #ifdef VERBOSE
@@ -134,7 +133,7 @@ void mergeSort(int pid, int l, int r)
 
 void parallelRead(int pid, int input_fd, size_t start, size_t end)
 {
-  int buf_size = min(FILE_THRESHOLD, static_cast<int>(end - start)) * TUPLE_SIZE;
+  int buf_size = min(FILE_THRESHOLD * TUPLE_SIZE, static_cast<int>(end - start));
   unsigned char *buffer = new unsigned char[buf_size];
   for (size_t cur_offset = start; cur_offset < end;) {
     if (cur_offset + buf_size > end)
