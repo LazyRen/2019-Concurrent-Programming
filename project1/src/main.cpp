@@ -8,8 +8,7 @@ int main(int argc, char* argv[])
   }
 
   // open input file.
-  int input_fd;
-  input_fd = open(argv[1], O_RDONLY);
+  int input_fd = open(argv[1], O_RDONLY);
   if (input_fd == -1) {
     printf("error: open input file\n");
     return 0;
@@ -35,21 +34,11 @@ int main(int argc, char* argv[])
     for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
       key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
       tmp_key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
-#ifdef DEBUG
-      printf("key%u: ", last_inserted+i);
-      printKeys(last_inserted+i, last_inserted+i);
-#endif
     }
     total_read += ret;
-#ifdef DEBUG
-    printf("total_read: %lu\n", total_read);
-#endif
     for (; last_thread < ((total_read/100)/key_per_thread) && last_thread < MAX_THREADS - 1; last_thread++) {
       th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread,
-                               (last_thread+1) * key_per_thread - 1);
-#ifdef DEBUG
-      printf("%u: %u ~ %u\n", last_thread, last_thread*key_per_thread, (last_thread+1)*key_per_thread-1);
-#endif
+                               (last_thread+1) * key_per_thread);
     }
   }
   delete[] buffer;
@@ -59,7 +48,7 @@ int main(int argc, char* argv[])
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
-  mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
+  mergeSort(last_thread, last_thread * key_per_thread, total_tuples);
   last_thread++;
   delete[] tmp_key;
 #ifdef VERBOSE
@@ -68,39 +57,28 @@ int main(int argc, char* argv[])
   cout << "last thread sorting took " << duration.count() << "ms\n";
 #endif
 
-#ifdef DEBUG
-  for (int i = 0; i < total_tuples; i++) {
-    printf("%d: %u ", i, key[i].index);
-    printKeys(i, i);
-  }
-#endif
-
   // open output file.
   int output_fd;
-  output_fd = open(argv[2], O_RDWR | O_CREAT | O_TRUNC, 0777);
+  output_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0777);
   if (output_fd == -1) {
     printf("error: open output file\n");
     return 0;
   }
 
   // flush to output file.
-  buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
-  for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
-    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
-#ifdef DEBUG
-    printf("%d: %u ", cur, key[i].index);
-    printKeys(i, i);
-#endif
-    if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
-#ifdef DEBUG
-      printf("last_inserted: %d\n", last_inserted);
-#endif
-      size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, last_inserted);
-      last_inserted += ret;
-      cur = -1;
+  for (int i = 0; i < MAX_THREADS - 1; i++)
+    th[i] = thread(parallelWrite, input_fd, output_fd, i * key_per_thread, (i+1) * key_per_thread);
+  parallelWrite(input_fd, output_fd, (MAX_THREADS-1) * key_per_thread, total_tuples);
+
+  for (int i = 0; i < MAX_THREADS - 1; i++) {
+    if (th[i].joinable()) {
+      try {
+        th[i].join();
+      } catch (const exception& ex) {
+        printf("pid%d catched error while writing\n", i);
+      }
     }
   }
-  delete[] buffer;
 
 #ifdef VERBOSE
   auto stop2 = high_resolution_clock::now();
@@ -125,7 +103,7 @@ void merge(int left, int mid, int right)
   int r = mid + 1;
   int s = left;
 
-  while (l <= mid && r <= right)
+  while (l <= mid && r < right)
   {
     if (key[l] <= key[r])
       tmp_key[s++] = key[l++];
@@ -135,15 +113,15 @@ void merge(int left, int mid, int right)
 
   int tmp = l > mid ? r : l;
 
-  memcpy(tmp_key+s, key+tmp, (right-s+1)*sizeof(KEYTYPE));
+  memcpy(tmp_key+s, key+tmp, (right-s)*sizeof(KEYTYPE));
 
-  copy(tmp_key+left, tmp_key+right+1, key+left);
+  copy(tmp_key+left, tmp_key+right, key+left);
 }
 
 void mergeSort(int pid, int l, int r)
 {
   if (l < r) {
-    sort(key + l, key + (r+1));
+    sort(key + l, key + r);
   }
 
   for (int div = 2; div <= MAX_THREADS; div *= 2) {
@@ -152,7 +130,7 @@ void mergeSort(int pid, int l, int r)
         if (th[pid-i].joinable()) {
           try {
             th[pid-i].join();
-          } catch (const std::exception& ex) {
+          } catch (const exception& ex) {
             printf("pid%d catched error doing %d merging\n", pid, div);
           }
         }
@@ -160,18 +138,29 @@ void mergeSort(int pid, int l, int r)
       int m;
       if (pid != MAX_THREADS - 1) {
         l = key_per_thread * (pid+1 - div);
-        m = l + (r - l) / 2;
+        m = l + (r - 1 - l) / 2;
       } else {
         m = l-1;
         l = key_per_thread * (pid+1 - div);
       }
       merge(l, m, r);
-#ifdef DEBUG
-      printf("%d: %d ~ %d\n", pid, l, r);
-      printKeys(l, r);
-#endif
     };
   }
+}
+
+void parallelWrite(int input_fd, int output_fd, int start, int end)
+{
+  int buf_size = min(FILE_THRESHOLD, end - start);
+  unsigned char *buffer = new unsigned char[TUPLE_SIZE * buf_size];
+  for (int i = 0, cur = 0, last_inserted = 0; i < end - start; i++, cur++) {
+    pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[start+i].index * TUPLE_SIZE);
+    if (cur == buf_size - 1 || i == end - 1) {
+      size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, start * TUPLE_SIZE + last_inserted);
+      last_inserted += ret;
+      cur = -1;
+    }
+  }
+  delete[] buffer;
 }
 
 void printKeys(int left, int right)
