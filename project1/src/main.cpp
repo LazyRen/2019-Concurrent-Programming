@@ -28,10 +28,12 @@ int main(int argc, char* argv[])
   // read data from input file & start sorting
   for (size_t i = 0; i < MAX_THREADS - 1; i++) {
     th[i] = thread(parallelRead, i, input_fd,
-                   i * key_per_thread * TUPLE_SIZE, (i+1) * key_per_thread * TUPLE_SIZE);
+                   static_cast<size_t>(i) * key_per_thread * TUPLE_SIZE,
+                  static_cast<size_t>(i+1) * key_per_thread * TUPLE_SIZE);
   }
   parallelRead(MAX_THREADS-1, input_fd,
-               (MAX_THREADS-1) * key_per_thread * TUPLE_SIZE, total_tuples * TUPLE_SIZE);
+               static_cast<size_t>(MAX_THREADS-1) * key_per_thread * TUPLE_SIZE,
+               static_cast<size_t>(total_tuples) * TUPLE_SIZE);
   delete[] tmp_key;
 
 #ifdef VERBOSE
@@ -133,7 +135,7 @@ void mergeSort(int pid, int l, int r)
 
 void parallelRead(int pid, int input_fd, size_t start, size_t end)
 {
-  int buf_size = min(FILE_THRESHOLD * TUPLE_SIZE, static_cast<int>(end - start));
+  size_t buf_size = min(FILE_THRESHOLD * TUPLE_SIZE, static_cast<int>(end - start));
   unsigned char *buffer = new unsigned char[buf_size];
   for (size_t cur_offset = start; cur_offset < end;) {
     if (cur_offset + buf_size > end)
