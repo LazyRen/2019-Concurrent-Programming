@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
   total_tuples    = file_size / TUPLE_SIZE;
   key_per_thread  = total_tuples / MAX_THREADS;
-  int last_thread = 0;
+  unsigned int last_thread = 0;
   key = new KEYTYPE[total_tuples];
   tmp_key = new KEYTYPE[total_tuples];
 #ifdef VERBOSE
@@ -30,17 +30,26 @@ int main(int argc, char* argv[])
   // read data from input file & start sorting
   unsigned char *buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
   for (size_t total_read = 0; total_read < file_size;) {
-    int last_inserted = total_read/TUPLE_SIZE - 1;
-    last_inserted = last_inserted == -1 ? 0 : last_inserted;
+    unsigned int last_inserted = total_read/TUPLE_SIZE;
     size_t ret = pread(input_fd, buffer, TUPLE_SIZE * FILE_THRESHOLD, total_read);
-    for (int i = 0; i < ret / TUPLE_SIZE; i++) {
+    for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
       key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
       tmp_key[last_inserted + i].assign(buffer + i*TUPLE_SIZE, last_inserted + i);
+#ifdef DEBUG
+      printf("key%u: ", last_inserted+i);
+      printKeys(last_inserted+i, last_inserted+i);
+#endif
     }
     total_read += ret;
+#ifdef DEBUG
+    printf("total_read: %lu\n", total_read);
+#endif
     for (; last_thread < ((total_read/100)/key_per_thread) && last_thread < MAX_THREADS - 1; last_thread++) {
       th[last_thread] = thread(mergeSort, last_thread, last_thread * key_per_thread,
                                (last_thread+1) * key_per_thread - 1);
+#ifdef DEBUG
+      printf("%u: %u ~ %u\n", last_thread, last_thread*key_per_thread, (last_thread+1)*key_per_thread-1);
+#endif
     }
   }
   delete[] buffer;
@@ -49,7 +58,6 @@ int main(int argc, char* argv[])
   auto stop = high_resolution_clock::now();
   auto duration = duration_cast<milliseconds>(stop - start);
   cout << "read & sort took " << duration.count() << "ms\n";
-  printf("last_thread: %d\n", last_thread);
 #endif
   mergeSort(last_thread, last_thread * key_per_thread, total_tuples-1);
   last_thread++;
@@ -58,6 +66,13 @@ int main(int argc, char* argv[])
   auto stop1 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stop1 - stop);
   cout << "last thread sorting took " << duration.count() << "ms\n";
+#endif
+
+#ifdef DEBUG
+  for (int i = 0; i < total_tuples; i++) {
+    printf("%d: %u ", i, key[i].index);
+    printKeys(i, i);
+  }
 #endif
 
   // open output file.
@@ -72,10 +87,17 @@ int main(int argc, char* argv[])
   buffer = new unsigned char[TUPLE_SIZE * FILE_THRESHOLD];
   for (int i = 0, cur = 0, last_inserted = 0; i < total_tuples; i++, cur++) {
     pread(input_fd, buffer + cur * TUPLE_SIZE, TUPLE_SIZE, key[i].index * TUPLE_SIZE);
+#ifdef DEBUG
+    printf("%d: %u ", cur, key[i].index);
+    printKeys(i, i);
+#endif
     if (cur == FILE_THRESHOLD - 1 || i == total_tuples - 1) {
+#ifdef DEBUG
+      printf("last_inserted: %d\n", last_inserted);
+#endif
       size_t ret = pwrite(output_fd, buffer, (cur+1) * TUPLE_SIZE, last_inserted);
       last_inserted += ret;
-      cur = 0;
+      cur = -1;
     }
   }
   delete[] buffer;
@@ -144,6 +166,10 @@ void mergeSort(int pid, int l, int r)
         l = key_per_thread * (pid+1 - div);
       }
       merge(l, m, r);
+#ifdef DEBUG
+      printf("%d: %d ~ %d\n", pid, l, r);
+      printKeys(l, r);
+#endif
     };
   }
 }

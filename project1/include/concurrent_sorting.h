@@ -19,12 +19,12 @@ using namespace std;
 #define KEY_SIZE        (10)
 #define TUPLE_SIZE      (100)
 #define MAX_THREADS     (16)
-#define FILE_THRESHOLD (1<<23)
+#define FILE_THRESHOLD  (1<<23)
 
 class KEYTYPE {
 public:
   unsigned char binary[KEY_SIZE];
-  int index;
+  unsigned int index;
 
   KEYTYPE() {};
 
