@@ -13,6 +13,9 @@ int main(int argc, char* argv[])
     printf("error: open input file\n");
     exit(0);
   }
+  __gnu_parallel::_Settings s;
+  s.algorithm_strategy = __gnu_parallel::force_parallel;
+  __gnu_parallel::_Settings::set(s);
 
   // get size of input file.
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
@@ -31,16 +34,27 @@ int main(int argc, char* argv[])
 #endif
 
   // read data from input file & start sorting
-  for (int cur_file = 0; cur_file < total_file; cur_file++) {
-    for (size_t i = 0; i < MAX_THREADS - 1; i++) {
-      th[i] = thread(parallelRead, i, input_fd,
-                     (chunk_per_file*cur_file) + (i*chunk_per_thread),
-                     (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
-    }
-    parallelRead(MAX_THREADS-1, input_fd,
-                 (chunk_per_file*cur_file) + ((MAX_THREADS-1)*chunk_per_thread),
-                 (chunk_per_file*(cur_file+1)));
-    if (total_file != 1) {//do external sort with tmp_files
+  if (total_file == 1) {
+    unsigned char *buffer = new unsigned char[total_tuples/2*TUPLE_SIZE];
+    readFromFile(input_fd, buffer, FILE_THRESHOLD/2, 0);
+    for (size_t i = 0; i < total_tuples/2; i++)
+      tuples[i].assign(buffer+i*TUPLE_SIZE);
+    readFromFile(input_fd, buffer, total_tuples/2, FILE_THRESHOLD/2);
+    for (size_t i = 0; i < total_tuples/2/TUPLE_SIZE; i++)
+      tuples[i].assign(buffer+(total_tuples/2)+i*TUPLE_SIZE);
+
+    sort(tuples, tuples+total_tuples);
+    delete[] buffer;
+  } else {
+    for (int cur_file = 0; cur_file < total_file; cur_file++) {
+      for (size_t i = 0; i < MAX_THREADS - 1; i++) {
+        th[i] = thread(parallelRead, i, input_fd,
+                      (chunk_per_file*cur_file) + (i*chunk_per_thread),
+                      (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
+      }
+      parallelRead(MAX_THREADS-1, input_fd,
+                  (chunk_per_file*cur_file) + ((MAX_THREADS-1)*chunk_per_thread),
+                  (chunk_per_file*(cur_file+1)));
       string outfile = to_string(cur_file) + ".tmp";
       tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
       if (tmp_fd[cur_file] == -1) {
@@ -55,20 +69,6 @@ int main(int argc, char* argv[])
       writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
-
-  // printf("wait for io to jon\n");
-  // if (total_file != 1) {
-  //   for (int i = 0; i < total_file; i++) {
-  //     if (th_io[i].joinable()) {
-  //       try {
-  //         th_io[i].join();
-  //       } catch (const exception& ex) {
-  //         printf("pid%d catched error while writing\n", i);
-  //       }
-  //     }
-  //     close(tmp_fd[i]);
-  //   }
-  // }
 
 #ifdef VERBOSE
   auto stop = high_resolution_clock::now();

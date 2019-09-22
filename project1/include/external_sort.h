@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include <parallel/algorithm>
+#include <parallel/settings.h>
 #ifdef VERBOSE
 #include <chrono>
 #include <iostream>
@@ -23,6 +25,7 @@ using namespace std;
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (500000000UL)
+#define _GLIBCXX_PARALLEL
 
 class KEYTYPE {
 public:
