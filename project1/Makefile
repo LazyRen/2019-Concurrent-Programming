@@ -2,8 +2,8 @@
 CC = g++
 
 # Macros specifying path for compile.
-SRCS := src/external_sort.cpp
-INCS := include/external_sort.h
+SRCS := $(wildcard src/*.cpp)
+INCS := $(wildcard include/*.h)
 INC = ./include/
 LIB = ./lib/
 

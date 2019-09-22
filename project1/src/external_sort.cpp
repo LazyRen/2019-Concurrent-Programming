@@ -16,14 +16,13 @@ int main(int argc, char* argv[])
 
   // get size of input file.
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
+  int tmp_fd[MAX_THREADS];
   total_file       = (file_size / FILE_THRESHOLD)
                    + (file_size % FILE_THRESHOLD == 0 ? 0 : 1);
   total_tuples     = (file_size / TUPLE_SIZE);
   chunk_per_file   = (file_size / total_file);
   chunk_per_thread = chunk_per_file / MAX_THREADS;
   tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
-  tmp_tuples       = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
-  int tmp_fd[MAX_THREADS];
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
   printf("total_tmp_files: %d, chunk_per_file: %zu\n", total_file, chunk_per_file);
@@ -56,7 +55,6 @@ int main(int argc, char* argv[])
       writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
-  delete[] tmp_tuples;
 
   // printf("wait for io to jon\n");
   // if (total_file != 1) {
@@ -131,9 +129,7 @@ void mergeSort(int pid, int l, int r)
         m = l-1;
         l = (chunk_per_thread / TUPLE_SIZE) * (pid+1 - div);
       }
-      // inplace_merge(tuples+l, tuples+m+1, tuples+r);
-      merge(tuples+l, tuples+m+1, tuples+m+1, tuples+r, tmp_tuples+l);
-      copy(tmp_tuples+l, tmp_tuples+r, tuples+l);
+      inplace_merge(tuples+l, tuples+m+1, tuples+r);
 #ifdef VERBOSE
       if (!is_sorted(tuples+l, tuples+r))
         printf("error: merging %d ~ %d is not sorted!\n", l, r);
@@ -296,11 +292,6 @@ bool isSorted(unsigned char *buf, size_t nbyte)
   }
 
   return true;
-}
-
-bool queue_comp(const pair<TUPLETYPE, pair<int, size_t> > &a, const pair<TUPLETYPE, pair<int, size_t> > &b)
-{
-  return a.first < b.first;
 }
 
 void printKey(TUPLETYPE tuple)

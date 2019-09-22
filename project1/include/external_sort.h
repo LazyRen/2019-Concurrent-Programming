@@ -20,7 +20,7 @@ using namespace std;
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
 #define MAX_THREADS     (16)
-#define FILE_THRESHOLD  (500000000UL)
+#define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (500000000UL)
 
@@ -69,7 +69,6 @@ class FILEINFO {
 };
 
 TUPLETYPE *tuples;
-TUPLETYPE *tmp_tuples;
 thread th[MAX_THREADS];
 vector<FILEINFO> tmp_files;
 int total_file;
@@ -83,7 +82,6 @@ void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);
 bool isSorted(unsigned char *buf, size_t nbyte);
-bool queue_comp(const pair<TUPLETYPE, pair<int, size_t> > &a, const pair<TUPLETYPE, pair<int, size_t> > &b);
 void printKey(TUPLETYPE tuple);
 void printKeys(int left, int right);
 
