@@ -19,9 +19,10 @@ int main(int argc, char* argv[])
   total_file       = (file_size / FILE_THRESHOLD)
                    + (file_size % FILE_THRESHOLD == 0 ? 0 : 1);
   total_tuples     = (file_size / TUPLE_SIZE);
-  chunk_per_file  =  (file_size / total_file);
+  chunk_per_file   = (file_size / total_file);
   chunk_per_thread = chunk_per_file / MAX_THREADS;
   tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
+  tmp_tuples       = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
   int tmp_fd[MAX_THREADS];
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
@@ -55,6 +56,7 @@ int main(int argc, char* argv[])
       writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
+  delete[] tmp_tuples;
 
   // printf("wait for io to jon\n");
   // if (total_file != 1) {
@@ -129,7 +131,13 @@ void mergeSort(int pid, int l, int r)
         m = l-1;
         l = (chunk_per_thread / TUPLE_SIZE) * (pid+1 - div);
       }
-      inplace_merge(tuples+l, tuples+m+1, tuples+r);
+      // inplace_merge(tuples+l, tuples+m+1, tuples+r);
+      merge(tuples+l, tuples+m+1, tuples+m+1, tuples+r, tmp_tuples+l);
+      copy(tmp_tuples+l, tmp_tuples+r, tuples+l);
+#ifdef VERBOSE
+      if (!is_sorted(tuples+l, tuples+r))
+        printf("error: merging %d ~ %d is not sorted!\n", l, r);
+#endif
     };
   }
 }
@@ -161,7 +169,7 @@ void externalSort(int output_fd)
 {
   bool is_done[total_file];
   int tmp_fd[total_file], tmp_swi[total_file];
-  size_t last_write_buf = (BUFFER_SIZE * 5), total_write = 0, write_idx = 0;
+  size_t last_write_buf = (BUFFER_SIZE * 2), total_write = 0, write_idx = 0;
   future<size_t> read[total_file];
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
   unsigned char ***tmp_tuples = new unsigned char**[total_file];
@@ -187,7 +195,6 @@ void externalSort(int output_fd)
   for (int i = 0; i < total_file; i++) {
     tmp_files[i].cur_offset += read[i].get();
 #ifdef VERBOSE
-    printf("writing to disk %zu Bytes done\n", total_write);
     if (!isSorted(tmp_tuples[i][0], BUFFER_SIZE))
       printf("error: tmp buffer %d is not sorted!\n", i);
 #endif

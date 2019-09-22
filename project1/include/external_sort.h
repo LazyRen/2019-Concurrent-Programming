@@ -20,7 +20,7 @@ using namespace std;
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
 #define MAX_THREADS     (16)
-#define FILE_THRESHOLD  (1000000000UL)
+#define FILE_THRESHOLD  (500000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (500000000UL)
 
@@ -69,6 +69,7 @@ class FILEINFO {
 };
 
 TUPLETYPE *tuples;
+TUPLETYPE *tmp_tuples;
 thread th[MAX_THREADS];
 vector<FILEINFO> tmp_files;
 int total_file;
