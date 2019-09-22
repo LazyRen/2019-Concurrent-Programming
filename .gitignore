@@ -12,6 +12,7 @@
 *.test
 *.dSYM
 *.swp
+*.tmp
 
 # Executables
 *.exe

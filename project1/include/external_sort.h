@@ -19,9 +19,10 @@ using namespace std;
 
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
-#define MAX_THREADS     (16UL)
+#define MAX_THREADS     (16)
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
+#define W_BUFFER_SIZE   (500000000UL)
 
 class KEYTYPE {
 public:
@@ -68,13 +69,11 @@ class FILEINFO {
 };
 
 TUPLETYPE *tuples;
-TUPLETYPE *tmp_tuples;
 thread th[MAX_THREADS];
-thread th_io[MAX_THREADS];
 vector<FILEINFO> tmp_files;
 int total_file;
 size_t total_tuples;
-size_t tuples_per_file;
+size_t chunk_per_file;
 size_t chunk_per_thread;
 
 void mergeSort(int pid, int l, int r);
@@ -82,6 +81,9 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end);
 void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);
+bool isSorted(unsigned char *buf, size_t nbyte);
+bool queue_comp(const pair<TUPLETYPE, pair<int, size_t> > &a, const pair<TUPLETYPE, pair<int, size_t> > &b);
+void printKey(TUPLETYPE tuple);
 void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
