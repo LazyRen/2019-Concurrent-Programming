@@ -35,16 +35,21 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {
-    unsigned char *buffer = new unsigned char[total_tuples/2*TUPLE_SIZE];
-    readFromFile(input_fd, buffer, FILE_THRESHOLD/2, 0);
-    for (size_t i = 0; i < total_tuples/2; i++)
-      tuples[i].assign(buffer+i*TUPLE_SIZE);
-    readFromFile(input_fd, buffer, total_tuples/2, FILE_THRESHOLD/2);
-    for (size_t i = 0; i < total_tuples/2/TUPLE_SIZE; i++)
-      tuples[i].assign(buffer+(total_tuples/2)+i*TUPLE_SIZE);
+    size_t start = 0, end = file_size;
+    size_t buf_size = min(total_tuples/2*TUPLE_SIZE, end - start);
+    unsigned char *buffer = new unsigned char[buf_size];
+    for (size_t cur_offset = start; cur_offset < end;) {
+      if (cur_offset + buf_size > end)
+        buf_size = (end - cur_offset);
+      size_t ret = pread(input_fd, buffer, buf_size, cur_offset);
+      for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
+        tuples[((cur_offset)/TUPLE_SIZE+i)].assign(buffer + i*TUPLE_SIZE);
+      }
+      cur_offset += ret;
+    }
+    delete[] buffer;
 
     sort(tuples, tuples+total_tuples);
-    delete[] buffer;
   } else {
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
@@ -82,6 +87,7 @@ int main(int argc, char* argv[])
     printf("error: open output file\n");
     exit(0);
   }
+  ftruncate(output_fd, file_size);
 
   // flush to output file.
   if (total_file == 1) {
