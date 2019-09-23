@@ -1,4 +1,5 @@
 #include "external_sort.h"
+#include "ksort.h"
 
 int main(int argc, char* argv[])
 {
@@ -53,7 +54,8 @@ int main(int argc, char* argv[])
     auto d = duration_cast<milliseconds>(endTime - startTime);
     cout << "read took " << d.count() << "ms\n";
 #endif
-    sort(tuples, tuples+total_tuples);
+    // sort(tuples, tuples+total_tuples);
+    kx::radix_sort(tuples, tuples+total_tuples);
 #ifdef VERBOSE
     auto endTime2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(endTime2 - endTime);
