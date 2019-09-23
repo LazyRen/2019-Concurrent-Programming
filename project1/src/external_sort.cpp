@@ -30,7 +30,7 @@ int main(int argc, char* argv[])
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
   printf("total_tmp_files: %d, chunk_per_file: %zu\n", total_file, chunk_per_file);
   printf("tuple array contains %zu keys\n", chunk_per_file/TUPLE_SIZE);
-  auto start = high_resolution_clock::now();
+  auto startTime = high_resolution_clock::now();
 #endif
 
   // read data from input file & start sorting
@@ -48,8 +48,49 @@ int main(int argc, char* argv[])
       cur_offset += ret;
     }
     delete[] buffer;
-
+#ifdef VERBOSE
+    auto endTime = high_resolution_clock::now();
+    auto d = duration_cast<milliseconds>(endTime - startTime);
+    cout << "read took " << d.count() << "ms\n";
+#endif
     sort(tuples, tuples+total_tuples);
+#ifdef VERBOSE
+    auto endTime2 = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(endTime2 - endTime);
+    cout << "sort took " << duration.count() << "ms\n";
+#endif
+  } else if (total_file == 2) {
+    size_t buf_size = total_tuples/4*TUPLE_SIZE;
+    unsigned char *buffer = new unsigned char[buf_size];
+
+    for (int cur_file = 0; cur_file < total_file; cur_file++) {
+      size_t start = cur_file * chunk_per_file, end = (cur_file+1) * chunk_per_file;
+      for (size_t cur_offset = start; cur_offset < end;) {
+        if (cur_offset + buf_size > end)
+          buf_size = (end - cur_offset);
+        size_t ret = pread(input_fd, buffer, buf_size, cur_offset);
+        size_t write_offset = cur_offset;
+        if (write_offset >= chunk_per_file)
+          write_offset -= chunk_per_file;
+        for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
+          tuples[((write_offset)/TUPLE_SIZE+i)].assign(buffer + i*TUPLE_SIZE);
+        }
+        cur_offset += ret;
+      }
+
+      sort(tuples, tuples+(chunk_per_file/TUPLE_SIZE));
+
+      string outfile = to_string(cur_file) + ".tmp";
+      tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
+      if (tmp_fd[cur_file] == -1) {
+        printf("error: open %s file\n", outfile.c_str());
+        exit(0);
+      }
+      size_t to_write = file_size / total_file;
+      tmp_files.push_back(FILEINFO(outfile, 0, to_write));
+      writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
+    }
+    delete[] buffer;
   } else {
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
@@ -71,13 +112,14 @@ int main(int argc, char* argv[])
 #ifdef VERBOSE
       printf("%s: %zu Bytes\n", outfile.c_str(), to_write);
 #endif
-      writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
+      if(total_file != 1)
+        writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
 
 #ifdef VERBOSE
-  auto stop = high_resolution_clock::now();
-  auto duration = duration_cast<milliseconds>(stop - start);
+  auto stopTime = high_resolution_clock::now();
+  auto duration = duration_cast<milliseconds>(stopTime - startTime);
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
 
@@ -87,7 +129,11 @@ int main(int argc, char* argv[])
     printf("error: open output file\n");
     exit(0);
   }
-  ftruncate(output_fd, file_size);
+  size_t ret = ftruncate(output_fd, file_size);
+  if (ret == static_cast<size_t>(-1)) {
+    printf("error: resizing output file to %zu failed\n", file_size);
+    exit(0);
+  }
 
   // flush to output file.
   if (total_file == 1) {
@@ -98,8 +144,8 @@ int main(int argc, char* argv[])
     externalSort(output_fd);
   }
 #ifdef VERBOSE
-  auto stop1 = high_resolution_clock::now();
-  duration = duration_cast<milliseconds>(stop1 - stop);
+  auto stopTime2 = high_resolution_clock::now();
+  duration = duration_cast<milliseconds>(stopTime2 - stopTime);
   cout << "file writing took " << duration.count() << "ms\n";
 #endif
 
