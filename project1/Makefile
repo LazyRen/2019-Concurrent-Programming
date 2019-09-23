@@ -18,7 +18,7 @@ $(TARGET): $(SRCS) $(INCS)
 # Delete binary & object files
 clean:
 	$(RM) $(TARGET) $(OBJS)
-	$(RM) ./output_tiny_ascii.test ./output_tiny_skewed.test ./output_tiny.test
+	$(RM) ./output_tiny_ascii.test ./output_tiny_skewed.test ./output_tiny.test *.tmp
 
 test:
 	make

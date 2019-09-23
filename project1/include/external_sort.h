@@ -19,6 +19,8 @@ using namespace std::chrono;
 #endif
 using namespace std;
 
+#ifndef EXTERNAL_SORT_H
+#define EXTERNAL_SORT_H
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
 #define MAX_THREADS     (16)
@@ -69,6 +71,18 @@ class FILEINFO {
     FILEINFO() {};
 
     FILEINFO(string file, size_t offset, size_t size) : file_name(file), cur_offset(offset), size(size) {};
+};
+
+struct RadixTraits
+{
+    static const int nBytes = 10;
+
+    int kth_byte(const TUPLETYPE& x, int k) {
+        return x.binary[KEY_SIZE - 1 - k] & ((unsigned char) 0xFF);
+    }
+    bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
+        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+    }
 };
 
 TUPLETYPE *tuples;
@@ -147,3 +161,5 @@ bool operator>= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
     return true;
   return false;
 }
+
+#endif

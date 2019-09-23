@@ -1,5 +1,5 @@
 #include "external_sort.h"
-#include "ksort.h"
+#include "kxsort.h"
 
 int main(int argc, char* argv[])
 {
@@ -55,8 +55,12 @@ int main(int argc, char* argv[])
     cout << "read took " << d.count() << "ms\n";
 #endif
     // sort(tuples, tuples+total_tuples);
-    kx::radix_sort(tuples, tuples+total_tuples);
+    kx::radix_sort(tuples, tuples+total_tuples, RadixTraits());
 #ifdef VERBOSE
+    if (!is_sorted(tuples, tuples+total_tuples)) {
+      printf("not sorted!\n");
+      exit(0);
+    }
     auto endTime2 = high_resolution_clock::now();
     auto duration = duration_cast<milliseconds>(endTime2 - endTime);
     cout << "sort took " << duration.count() << "ms\n";
@@ -129,8 +133,10 @@ int main(int argc, char* argv[])
 
 void mergeSort(int pid, int l, int r)
 {
-  if (l < r)
-    sort(tuples + l, tuples + r);
+  if (l < r) {
+    // sort(tuples + l, tuples + r);
+    kx::radix_sort(tuples+l, tuples+r, RadixTraits());
+  }
 
   for (int div = 2; div <= MAX_THREADS; div *= 2) {
     if (pid % div == div - 1) {
