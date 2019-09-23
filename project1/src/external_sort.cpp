@@ -189,11 +189,11 @@ void externalSort(int output_fd)
 {
   bool is_done[total_file];
   int tmp_fd[total_file], tmp_swi[total_file];
-  size_t last_write_buf = (BUFFER_SIZE * 2), total_write = 0, write_idx = 0;
+  size_t total_write = 0, write_idx = 0;
   future<size_t> read[total_file];
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
   unsigned char ***tmp_tuples = new unsigned char**[total_file];
-  unsigned char *write_buf = new unsigned char[last_write_buf];
+  unsigned char *write_buf = new unsigned char[W_BUFFER_SIZE];
 
   for (int i = 0; i < total_file; i++) {
     tmp_tuples[i] = new unsigned char*[2];
@@ -229,7 +229,7 @@ void externalSort(int output_fd)
     write_idx += TUPLE_SIZE;
 
     // write buffer is full. Flush to disk.
-    if (write_idx >= last_write_buf) {
+    if (write_idx >= W_BUFFER_SIZE) {
 #ifdef VERBOSE
       printf("writing to disk %zu Bytes done\n", total_write + write_idx);
       if (!isSorted(write_buf, write_idx))
