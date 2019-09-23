@@ -33,35 +33,22 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {
-    size_t start = 0, end = file_size;
-    size_t buf_size = min(total_tuples/2*TUPLE_SIZE, end - start);
-    unsigned char *buffer = new unsigned char[buf_size];
-    for (size_t cur_offset = start; cur_offset < end;) {
-      if (cur_offset + buf_size > end)
-        buf_size = (end - cur_offset);
-      size_t ret = pread(input_fd, buffer, buf_size, cur_offset);
-      for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
-        tuples[((cur_offset)/TUPLE_SIZE+i)].assign(buffer + i*TUPLE_SIZE);
+    for (size_t i = 0; i < MAX_THREADS - 1; i++) {
+      th[i] = thread(parallelRead, i, input_fd, (i*chunk_per_thread), (i+1)*chunk_per_thread);
+    }
+    parallelRead(MAX_THREADS-1, input_fd, (MAX_THREADS-1)*chunk_per_thread, chunk_per_file);
+
+    for (int i = 0; i < MAX_THREADS - 1; i++) {
+      if (th[i].joinable()) {
+        try {
+          th[i].join();
+        } catch (const exception& ex) {
+          printf("error: parallel read thread\n"  );
+        }
       }
-      cur_offset += ret;
     }
-    delete[] buffer;
-#ifdef VERBOSE
-    auto endTime = high_resolution_clock::now();
-    auto d = duration_cast<milliseconds>(endTime - startTime);
-    cout << "read took " << d.count() << "ms\n";
-#endif
-    // sort(tuples, tuples+total_tuples);
+
     kx::radix_sort(tuples, tuples+total_tuples, RadixTraits());
-#ifdef VERBOSE
-    if (!is_sorted(tuples, tuples+total_tuples)) {
-      printf("not sorted!\n");
-      exit(0);
-    }
-    auto endTime2 = high_resolution_clock::now();
-    auto duration = duration_cast<milliseconds>(endTime2 - endTime);
-    cout << "sort took " << duration.count() << "ms\n";
-#endif
   } else {
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
@@ -72,6 +59,7 @@ int main(int argc, char* argv[])
       parallelRead(MAX_THREADS-1, input_fd,
                   (chunk_per_file*cur_file) + ((MAX_THREADS-1)*chunk_per_thread),
                   (chunk_per_file*(cur_file+1)));
+
       for (int i = 0; i < MAX_THREADS - 1; i++) {
         if (th[i].joinable()) {
           try {
@@ -81,7 +69,9 @@ int main(int argc, char* argv[])
           }
         }
       }
+
       kx::radix_sort(tuples, tuples+chunk_per_file/TUPLE_SIZE, RadixTraits());
+
       string outfile = to_string(cur_file) + ".tmp";
       tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
       if (tmp_fd[cur_file] == -1) {
@@ -141,7 +131,6 @@ int main(int argc, char* argv[])
 void mergeSort(int pid, int l, int r)
 {
   if (l < r) {
-    // sort(tuples + l, tuples + r);
     kx::radix_sort(tuples+l, tuples+r, RadixTraits());
   }
 
