@@ -59,38 +59,6 @@ int main(int argc, char* argv[])
     auto duration = duration_cast<milliseconds>(endTime2 - endTime);
     cout << "sort took " << duration.count() << "ms\n";
 #endif
-  } else if (total_file == 2) {
-    size_t buf_size = total_tuples/4*TUPLE_SIZE;
-    unsigned char *buffer = new unsigned char[buf_size];
-
-    for (int cur_file = 0; cur_file < total_file; cur_file++) {
-      size_t start = cur_file * chunk_per_file, end = (cur_file+1) * chunk_per_file;
-      for (size_t cur_offset = start; cur_offset < end;) {
-        if (cur_offset + buf_size > end)
-          buf_size = (end - cur_offset);
-        size_t ret = pread(input_fd, buffer, buf_size, cur_offset);
-        size_t write_offset = cur_offset;
-        if (write_offset >= chunk_per_file)
-          write_offset -= chunk_per_file;
-        for (unsigned int i = 0; i < ret / TUPLE_SIZE; i++) {
-          tuples[((write_offset)/TUPLE_SIZE+i)].assign(buffer + i*TUPLE_SIZE);
-        }
-        cur_offset += ret;
-      }
-
-      sort(tuples, tuples+(chunk_per_file/TUPLE_SIZE));
-
-      string outfile = to_string(cur_file) + ".tmp";
-      tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
-      if (tmp_fd[cur_file] == -1) {
-        printf("error: open %s file\n", outfile.c_str());
-        exit(0);
-      }
-      size_t to_write = file_size / total_file;
-      tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-      writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
-    }
-    delete[] buffer;
   } else {
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
@@ -320,7 +288,8 @@ size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset)
   size_t total_write = 0;
   while (nbyte) {
 
-    size_t ret = pwrite(fd, buf, nbyte, offset);
+    // size_t ret = pwrite(fd, buf, nbyte, offset);
+    size_t ret = write(fd, buf, nbyte);
     if (ret == static_cast<size_t>(-1)) {
       printf("error: writing %zu to %d's %zu offset FAILED\n", nbyte, fd, offset);
       exit(0);
