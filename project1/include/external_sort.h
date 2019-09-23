@@ -10,8 +10,6 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
-#include <parallel/algorithm>
-#include <parallel/settings.h>
 #ifdef VERBOSE
 #include <chrono>
 #include <iostream>

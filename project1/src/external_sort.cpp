@@ -14,9 +14,6 @@ int main(int argc, char* argv[])
     printf("error: open input file\n");
     exit(0);
   }
-  __gnu_parallel::_Settings s;
-  s.algorithm_strategy = __gnu_parallel::force_parallel;
-  __gnu_parallel::_Settings::set(s);
 
   // get size of input file.
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
@@ -75,6 +72,16 @@ int main(int argc, char* argv[])
       parallelRead(MAX_THREADS-1, input_fd,
                   (chunk_per_file*cur_file) + ((MAX_THREADS-1)*chunk_per_thread),
                   (chunk_per_file*(cur_file+1)));
+      for (int i = 0; i < MAX_THREADS - 1; i++) {
+        if (th[i].joinable()) {
+          try {
+            th[i].join();
+          } catch (const exception& ex) {
+            printf("error: parallel read thread\n"  );
+          }
+        }
+      }
+      kx::radix_sort(tuples, tuples+chunk_per_file/TUPLE_SIZE, RadixTraits());
       string outfile = to_string(cur_file) + ".tmp";
       tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
       if (tmp_fd[cur_file] == -1) {
@@ -181,12 +188,12 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
   }
   delete[] buffer;
 
-  while (start >= chunk_per_file)
-    start -= chunk_per_file;
-  while (end > chunk_per_file)
-    end -= chunk_per_file;
+  // while (start >= chunk_per_file)
+  //   start -= chunk_per_file;
+  // while (end > chunk_per_file)
+  //   end -= chunk_per_file;
 
-  mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
+  // mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
 }
 
 void externalSort(int output_fd)
