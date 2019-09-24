@@ -17,13 +17,16 @@ int main(int argc, char* argv[])
 
   // get size of input file.
   const size_t file_size = lseek(input_fd, 0, SEEK_END);
-  int tmp_fd[MAX_THREADS];
   total_file       = (file_size / FILE_THRESHOLD)
                    + (file_size % FILE_THRESHOLD == 0 ? 0 : 1);
   total_tuples     = (file_size / TUPLE_SIZE);
   chunk_per_file   = (file_size / total_file);
   chunk_per_thread = chunk_per_file / MAX_THREADS;
   tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
+  int tmp_fd[total_file];
+
+  posix_fadvise(input_fd, 0, file_size, POSIX_FADV_SEQUENTIAL);
+
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
   printf("total_tmp_files: %d, chunk_per_file: %zu\n", total_file, chunk_per_file);
@@ -33,9 +36,8 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {
-    for (size_t i = 0; i < MAX_THREADS - 1; i++) {
+    for (size_t i = 0; i < MAX_THREADS - 1; i++)
       th[i] = thread(parallelRead, i, input_fd, (i*chunk_per_thread), (i+1)*chunk_per_thread);
-    }
     parallelRead(MAX_THREADS-1, input_fd, (MAX_THREADS-1)*chunk_per_thread, chunk_per_file);
 
     for (int i = 0; i < MAX_THREADS - 1; i++) {
@@ -48,9 +50,8 @@ int main(int argc, char* argv[])
       }
     }
 
-    // kx::radix_sort(tuples, tuples+total_tuples, RadixTraits());
     parallelSort(tuples, total_tuples);
-  } else {
+  } else {//total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
         th[i] = thread(parallelRead, i, input_fd,
@@ -71,7 +72,6 @@ int main(int argc, char* argv[])
         }
       }
 
-      // kx::radix_sort(tuples, tuples+chunk_per_file/TUPLE_SIZE, RadixTraits());
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
 
       string outfile = to_string(cur_file) + ".tmp";
@@ -80,13 +80,10 @@ int main(int argc, char* argv[])
         printf("error: open %s file\n", outfile.c_str());
         exit(0);
       }
+
       size_t to_write = file_size / total_file;
       tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-#ifdef VERBOSE
-      printf("%s: %zu Bytes\n", outfile.c_str(), to_write);
-#endif
-      if(total_file != 1)
-        writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
+      writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
 
@@ -236,6 +233,7 @@ void externalSort(int output_fd)
     is_done[i] = false;
     tmp_swi[i] = 0;
     tmp_fd[i]  = open(tmp_files[i].file_name.c_str(), O_RDONLY);
+    posix_fadvise(tmp_fd[i], 0, BUFFER_SIZE, POSIX_FADV_SEQUENTIAL);
     if (tmp_fd[i] == -1) {
       printf("error: open %s file\n", tmp_files[i].file_name.c_str());
       exit(0);
@@ -279,6 +277,7 @@ void externalSort(int output_fd)
     if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
       if (!is_done[f_idx]) {
         tmp_files[f_idx].cur_offset += read[f_idx].get();
+        posix_fadvise(tmp_fd[f_idx], tmp_files[f_idx].cur_offset, BUFFER_SIZE, POSIX_FADV_SEQUENTIAL);
 #ifdef VERBOSE
         printf("%s is reading next chunk. %zu done\n", tmp_files[f_idx].file_name.c_str(), tmp_files[f_idx].cur_offset);
 #endif
@@ -316,7 +315,7 @@ size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset)
 {
   size_t total_read = 0;
   while (nbyte) {
-    size_t ret = pread(fd, buf, nbyte, offset);
+    size_t ret  = pread(fd, buf, nbyte, offset);
     nbyte      -= ret;
     offset     += ret;
     total_read += ret;
@@ -329,15 +328,10 @@ size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset)
 {
   size_t total_write = 0;
   while (nbyte) {
-
-    // size_t ret = pwrite(fd, buf, nbyte, offset);
-    size_t ret = write(fd, buf, nbyte);
-    if (ret == static_cast<size_t>(-1)) {
-      printf("error: writing %zu to %d's %zu offset FAILED\n", nbyte, fd, offset);
-      exit(0);
-    }
-    nbyte  -= ret;
-    offset += ret;
+    size_t ret   = pwrite(fd, buf, nbyte, offset);
+    // size_t ret   = write(fd, buf, nbyte);
+    nbyte       -= ret;
+    offset      += ret;
     total_write += ret;
   }
 
