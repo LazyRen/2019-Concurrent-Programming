@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+#include <omp.h>
 #ifdef VERBOSE
 #include <chrono>
 #include <iostream>
@@ -83,6 +84,18 @@ struct RadixTraits
     }
 };
 
+struct OneByteRadixTraits
+{
+    static const int nBytes = 1;
+
+    int kth_byte(const TUPLETYPE& x, int k) {
+        return x.binary[k] & ((unsigned char) 0xFF);
+    }
+    bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
+        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+    }
+};
+
 TUPLETYPE *tuples;
 thread th[MAX_THREADS];
 vector<FILEINFO> tmp_files;
@@ -93,6 +106,7 @@ size_t chunk_per_thread;
 
 void mergeSort(int pid, int l, int r);
 void parallelRead(int pid, int input_fd, size_t start, size_t end);
+void parallelSort(TUPLETYPE* tuples, size_t count);
 void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);

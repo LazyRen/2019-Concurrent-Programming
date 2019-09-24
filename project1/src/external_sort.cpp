@@ -48,7 +48,8 @@ int main(int argc, char* argv[])
       }
     }
 
-    kx::radix_sort(tuples, tuples+total_tuples, RadixTraits());
+    // kx::radix_sort(tuples, tuples+total_tuples, RadixTraits());
+    parallelSort(tuples, total_tuples);
   } else {
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
@@ -70,7 +71,8 @@ int main(int argc, char* argv[])
         }
       }
 
-      kx::radix_sort(tuples, tuples+chunk_per_file/TUPLE_SIZE, RadixTraits());
+      // kx::radix_sort(tuples, tuples+chunk_per_file/TUPLE_SIZE, RadixTraits());
+      parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
 
       string outfile = to_string(cur_file) + ".tmp";
       tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
@@ -183,6 +185,32 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
   //   end -= chunk_per_file;
 
   // mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
+}
+
+void parallelSort(TUPLETYPE* tuples, size_t count)
+{
+  kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
+  int ompThread = 16;
+  size_t partition[ompThread];
+
+  for (int i = 1; i < ompThread; i++) {
+    unsigned char key[100];
+    memset(key, 0, sizeof(key));
+    key[0] = i * ompThread;
+    TUPLETYPE tmp(key);
+    auto idx = lower_bound(tuples, tuples+count, tmp);
+    partition[i-1] = idx - tuples;
+  }
+  partition[ompThread-1] = count;
+
+  #pragma omp parallel num_threads(ompThread)
+  {
+    int tid = omp_get_thread_num();
+    size_t prev = tid == 0 ? 0 : partition[tid-1];
+
+    kx::radix_sort(tuples+prev, tuples+partition[tid], RadixTraits());
+  }
+
 }
 
 void externalSort(int output_fd)
