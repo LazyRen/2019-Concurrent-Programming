@@ -190,25 +190,23 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
 void parallelSort(TUPLETYPE* tuples, size_t count)
 {
   kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
-  int ompThread = 16;
-  size_t partition[ompThread];
+  size_t partition[MAX_THREADS];
 
-  for (int i = 1; i < ompThread; i++) {
+  for (int i = 1; i < MAX_THREADS; i++) {
     unsigned char key[100];
     memset(key, 0, sizeof(key));
-    key[0] = i * ompThread;
+    key[0] = i * MAX_THREADS;
     TUPLETYPE tmp(key);
     auto idx = lower_bound(tuples, tuples+count, tmp);
     partition[i-1] = idx - tuples;
   }
-  partition[ompThread-1] = count;
+  partition[MAX_THREADS-1] = count;
 
-  #pragma omp parallel num_threads(ompThread)
-  {
-    int tid = omp_get_thread_num();
-    size_t prev = tid == 0 ? 0 : partition[tid-1];
+  #pragma omp parallel for num_threads(MAX_THREADS) schedule(dynamic)
+  for (int i = 0; i < MAX_THREADS; i++) {
+    size_t prev = i == 0 ? 0 : partition[i-1];
 
-    kx::radix_sort(tuples+prev, tuples+partition[tid], RadixTraits());
+    kx::radix_sort(tuples+prev, tuples+partition[i], RadixTraits());
   }
 
 }
