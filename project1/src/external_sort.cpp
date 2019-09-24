@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
           try {
             th[i].join();
           } catch (const exception& ex) {
-            printf("error: parallel read thread\n"  );
+            printf("error: parallel read thread\n");
           }
         }
       }
@@ -189,17 +189,22 @@ void externalSort(int output_fd)
 {
   bool is_done[total_file];
   int tmp_fd[total_file], tmp_swi[total_file];
-  size_t total_write = 0, write_idx = 0;
-  future<size_t> read[total_file];
+  size_t total_write = 0, write_idx = 0, write_swi = 0;
+  future<size_t> read[total_file], write;
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
   unsigned char ***tmp_tuples = new unsigned char**[total_file];
-  unsigned char *write_buf = new unsigned char[W_BUFFER_SIZE];
+  unsigned char **write_buf = new unsigned char*[2];
 
   for (int i = 0; i < total_file; i++) {
     tmp_tuples[i] = new unsigned char*[2];
-    for(int j = 0; j < 2; j++)
+    for (int j = 0; j < 2; j++)
       tmp_tuples[i][j] = new unsigned char[BUFFER_SIZE];
   }
+
+  for (int i = 0; i < 2; i++)
+    write_buf[i] = new unsigned char[W_BUFFER_SIZE];
+
+  write = async(writeToFile, -1, (void*)0, 0, 0);
 
   for (int i = 0; i < total_file; i++) {
     is_done[i] = false;
@@ -225,19 +230,24 @@ void externalSort(int output_fd)
   while (!queue.empty()) {
     auto min_tuple = queue.top(); queue.pop();
     int f_idx = min_tuple.second.first; size_t offset = min_tuple.second.second;
-    memcpy(write_buf + write_idx, min_tuple.first.binary, TUPLE_SIZE);
+    memcpy(write_buf[write_swi] + write_idx, min_tuple.first.binary, TUPLE_SIZE);
     write_idx += TUPLE_SIZE;
 
     // write buffer is full. Flush to disk.
     if (write_idx >= W_BUFFER_SIZE) {
 #ifdef VERBOSE
       printf("writing to disk %zu Bytes done\n", total_write + write_idx);
-      if (!isSorted(write_buf, write_idx))
+      if (!isSorted(write_buf[write_swi], write_idx))
         printf("error: write buffer is not sorted!\n");
       printf("%d: offset: %zu nbyte:%zu\n", output_fd, total_write, write_idx);
 #endif
-      total_write += writeToFile(output_fd, write_buf, write_idx, total_write);
+      total_write += write.get();
+      if (total_write + write_idx < total_tuples * TUPLE_SIZE)
+        write = async(writeToFile, output_fd, write_buf[write_swi], write_idx, total_write);
+      else
+        total_write += writeToFile(output_fd, write_buf[write_swi], write_idx, total_write);
       write_idx = 0;
+      write_swi = (write_swi+1) % 2;
     }
 
     if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
@@ -270,6 +280,8 @@ void externalSort(int output_fd)
       delete[] tmp_tuples[i][j];
     delete[] tmp_tuples[i];
   }
+  for (int i = 0; i < 2; i++)
+    delete[] write_buf[i];
   delete[] write_buf;
 }
 

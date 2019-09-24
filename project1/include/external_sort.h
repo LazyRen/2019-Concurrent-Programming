@@ -24,7 +24,7 @@ using namespace std;
 #define MAX_THREADS     (16)
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
-#define W_BUFFER_SIZE   (500000000UL)
+#define W_BUFFER_SIZE   (200000000UL)
 #define _GLIBCXX_PARALLEL
 
 class KEYTYPE {
