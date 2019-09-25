@@ -36,48 +36,27 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {
-    #pragma omp parallel for num_threads(MAX_THREADS - 1)
-    for (size_t i = 0; i < MAX_THREADS - 1; i++) {
-      parallelRead(i, input_fd, (i*chunk_per_thread), (i+1)*chunk_per_thread);
-      // th[i] = thread(parallelRead, i, input_fd, (i*chunk_per_thread), (i+1)*chunk_per_thread);
+    #pragma omp parallel for num_threads(MAX_THREADS)
+    for (size_t i = 0; i < MAX_THREADS; i++) {
+      parallelRead(i, input_fd, i*chunk_per_thread, (i+1)*chunk_per_thread);
+      if (i == MAX_THREADS - 1)
+        parallelRead(i, input_fd, i*chunk_per_thread, chunk_per_file);
     }
-    parallelRead(MAX_THREADS-1, input_fd, (MAX_THREADS-1)*chunk_per_thread, chunk_per_file);
-
-    // for (int i = 0; i < MAX_THREADS - 1; i++) {
-    //   if (th[i].joinable()) {
-    //     try {
-    //       th[i].join();
-    //     } catch (const exception& ex) {
-    //       printf("error: parallel read thread\n"  );
-    //     }
-    //   }
-    // }
 
     parallelSort(tuples, total_tuples);
   } else {//total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
-      #pragma omp parallel for num_threads(MAX_THREADS - 1)
-      for (size_t i = 0; i < MAX_THREADS - 1; i++) {
+      #pragma omp parallel for num_threads(MAX_THREADS)
+      for (size_t i = 0; i < MAX_THREADS; i++) {
         parallelRead(i, input_fd,
                     (chunk_per_file*cur_file) + (i*chunk_per_thread),
                     (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
-        // th[i] = thread(parallelRead, i, input_fd,
-        //               (chunk_per_file*cur_file) + (i*chunk_per_thread),
-        //               (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
-      }
-      parallelRead(MAX_THREADS-1, input_fd,
-                  (chunk_per_file*cur_file) + ((MAX_THREADS-1)*chunk_per_thread),
+        if (i == MAX_THREADS - 1) {
+          parallelRead(i, input_fd,
+                  (chunk_per_file*cur_file) + (i*chunk_per_thread),
                   (chunk_per_file*(cur_file+1)));
-
-      // for (int i = 0; i < MAX_THREADS - 1; i++) {
-      //   if (th[i].joinable()) {
-      //     try {
-      //       th[i].join();
-      //     } catch (const exception& ex) {
-      //       printf("error: parallel read thread\n");
-      //     }
-      //   }
-      // }
+        }
+      }
 
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
 
