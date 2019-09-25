@@ -76,7 +76,7 @@ struct RadixTraits
     static const int nBytes = 9;
 
     int kth_byte(const TUPLETYPE& x, int k) {
-        return x.binary[KEY_SIZE - 1 - k] & ((unsigned char) 0xFF);
+        return x.binary[KEY_SIZE - 2 - k] & ((unsigned char) 0xFF);
     }
     bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
         return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
