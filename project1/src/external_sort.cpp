@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
       for (size_t i = 0; i < MAX_THREADS - 1; i++) {
         parallelRead(i, input_fd,
                     (chunk_per_file*cur_file) + (i*chunk_per_thread),
-                    (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread))
+                    (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
         // th[i] = thread(parallelRead, i, input_fd,
         //               (chunk_per_file*cur_file) + (i*chunk_per_thread),
         //               (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
