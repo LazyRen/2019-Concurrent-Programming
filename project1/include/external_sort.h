@@ -73,7 +73,7 @@ class FILEINFO {
 
 struct RadixTraits
 {
-    static const int nBytes = 10;
+    static const int nBytes = 9;
 
     int kth_byte(const TUPLETYPE& x, int k) {
         return x.binary[KEY_SIZE - 1 - k] & ((unsigned char) 0xFF);
