@@ -25,8 +25,6 @@ int main(int argc, char* argv[])
   tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
   int tmp_fd[total_file];
 
-  posix_fadvise(input_fd, 0, file_size, POSIX_FADV_SEQUENTIAL);
-
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
   printf("total_tmp_files: %d, chunk_per_file: %zu\n", total_file, chunk_per_file);
@@ -61,17 +59,18 @@ int main(int argc, char* argv[])
       }
 
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
+      if (cur_file != -1) {
+        string outfile = to_string(cur_file) + ".tmp";
+        tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
+        if (tmp_fd[cur_file] == -1) {
+          printf("error: open %s file\n", outfile.c_str());
+          exit(0);
+        }
 
-      string outfile = to_string(cur_file) + ".tmp";
-      tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
-      if (tmp_fd[cur_file] == -1) {
-        printf("error: open %s file\n", outfile.c_str());
-        exit(0);
+        size_t to_write = file_size / total_file;
+        tmp_files.push_back(FILEINFO(outfile, 0, to_write));
+        writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
       }
-
-      size_t to_write = file_size / total_file;
-      tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-      writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
     }
   }
 
@@ -96,9 +95,7 @@ int main(int argc, char* argv[])
   // flush to output file.
   if (total_file == 1) {
     writeToFile(output_fd, tuples, file_size, 0);
-    delete [] tuples;
   } else {
-    delete [] tuples;
     externalSort(output_fd);
   }
 #ifdef VERBOSE
@@ -107,6 +104,8 @@ int main(int argc, char* argv[])
   cout << "file writing took " << duration.count() << "ms\n";
 #endif
 
+  // free
+  delete [] tuples;
   // close input file.
   close(input_fd);
   // close output file.
@@ -164,12 +163,14 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
   }
   delete[] buffer;
 
-  // while (start >= chunk_per_file)
-  //   start -= chunk_per_file;
-  // while (end > chunk_per_file)
-  //   end -= chunk_per_file;
+  /*
+  while (start >= chunk_per_file)
+    start -= chunk_per_file;
+  while (end > chunk_per_file)
+    end -= chunk_per_file;
 
-  // mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
+  mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
+  */
 }
 
 void parallelSort(TUPLETYPE* tuples, size_t count)
@@ -177,6 +178,7 @@ void parallelSort(TUPLETYPE* tuples, size_t count)
   kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
   size_t partition[MAX_THREADS];
 
+  #pragma omp parallel for num_threads(MAX_THREADS)
   for (int i = 1; i < MAX_THREADS; i++) {
     unsigned char key[100];
     memset(key, 0, sizeof(key));
@@ -200,13 +202,14 @@ void externalSort(int output_fd)
 {
   bool is_done[total_file];
   int tmp_fd[total_file], tmp_swi[total_file];
+  int tmp_files = total_file - 1;
   size_t total_write = 0, write_idx = 0, write_swi = 0;
   future<size_t> read[total_file], write;
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
   unsigned char ***tmp_tuples = new unsigned char**[total_file];
   unsigned char **write_buf = new unsigned char*[2];
 
-  for (int i = 0; i < total_file; i++) {
+  for (int i = 0; i < tmp_files; i++) {
     tmp_tuples[i] = new unsigned char*[2];
     for (int j = 0; j < 2; j++)
       tmp_tuples[i][j] = new unsigned char[BUFFER_SIZE];
@@ -217,11 +220,10 @@ void externalSort(int output_fd)
 
   write = async(writeToFile, -1, (void*)0, 0, 0);
 
-  for (int i = 0; i < total_file; i++) {
+  for (int i = 0; i < tmp_files; i++) {
     is_done[i] = false;
     tmp_swi[i] = 0;
     tmp_fd[i]  = open(tmp_files[i].file_name.c_str(), O_RDONLY);
-    posix_fadvise(tmp_fd[i], 0, BUFFER_SIZE, POSIX_FADV_SEQUENTIAL);
     if (tmp_fd[i] == -1) {
       printf("error: open %s file\n", tmp_files[i].file_name.c_str());
       exit(0);
@@ -229,7 +231,7 @@ void externalSort(int output_fd)
     read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][0], BUFFER_SIZE, 0);
   }
 
-  for (int i = 0; i < total_file; i++) {
+  for (int i = 0; i < tmp_files; i++) {
     tmp_files[i].cur_offset += read[i].get();
 #ifdef VERBOSE
     if (!isSorted(tmp_tuples[i][0], BUFFER_SIZE))
@@ -238,6 +240,7 @@ void externalSort(int output_fd)
     queue.push({TUPLETYPE(tmp_tuples[i][0]), {i, 0}});
     read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][1], BUFFER_SIZE, tmp_files[i].cur_offset);
   }
+  queue.push({tuples[0], {tmp_files, 0}});
 
   while (!queue.empty()) {
     auto min_tuple = queue.top(); queue.pop();
@@ -248,10 +251,8 @@ void externalSort(int output_fd)
     // write buffer is full. Flush to disk.
     if (write_idx >= W_BUFFER_SIZE) {
 #ifdef VERBOSE
-      printf("writing to disk %zu Bytes done\n", total_write + write_idx);
       if (!isSorted(write_buf[write_swi], write_idx))
         printf("error: write buffer is not sorted!\n");
-      printf("%d: offset: %zu nbyte:%zu\n", output_fd, total_write, write_idx);
 #endif
       total_write += write.get();
       if (total_write + write_idx < total_tuples * TUPLE_SIZE)
@@ -261,30 +262,31 @@ void externalSort(int output_fd)
       write_idx = 0;
       write_swi = (write_swi+1) % 2;
     }
-
-    if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
-      if (!is_done[f_idx]) {
-        tmp_files[f_idx].cur_offset += read[f_idx].get();
-        posix_fadvise(tmp_fd[f_idx], tmp_files[f_idx].cur_offset, BUFFER_SIZE, POSIX_FADV_SEQUENTIAL);
-#ifdef VERBOSE
-        printf("%s is reading next chunk. %zu done\n", tmp_files[f_idx].file_name.c_str(), tmp_files[f_idx].cur_offset);
-#endif
-        read[f_idx] = async(readFromFile, tmp_fd[f_idx], tmp_tuples[f_idx][tmp_swi[f_idx]],
-                            BUFFER_SIZE, tmp_files[f_idx].cur_offset);
-        tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
-        queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]], {f_idx, 0}});
-
-        if (tmp_files[f_idx].cur_offset + BUFFER_SIZE >= tmp_files[f_idx].size)
-          is_done[f_idx] = true;
-      } else {
-        if (tmp_files[f_idx].cur_offset < tmp_files[f_idx].size) {
+    if (f_idx == tmp_files) {
+      if (offset + TUPLE_SIZE < chunk_per_file)
+        queue.push({tuples[offset/TUPLE_SIZE + 1], {f_idx, offset+TUPLE_SIZE}});
+    } else {
+      if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
+        if (!is_done[f_idx]) {
           tmp_files[f_idx].cur_offset += read[f_idx].get();
+
+          read[f_idx] = async(readFromFile, tmp_fd[f_idx], tmp_tuples[f_idx][tmp_swi[f_idx]],
+                              BUFFER_SIZE, tmp_files[f_idx].cur_offset);
           tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
           queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]], {f_idx, 0}});
+
+          if (tmp_files[f_idx].cur_offset + BUFFER_SIZE >= tmp_files[f_idx].size)
+            is_done[f_idx] = true;
+        } else {
+          if (tmp_files[f_idx].cur_offset < tmp_files[f_idx].size) {
+            tmp_files[f_idx].cur_offset += read[f_idx].get();
+            tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
+            queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]], {f_idx, 0}});
+          }
         }
+      } else {
+        queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]] + (offset+TUPLE_SIZE), {f_idx, offset+TUPLE_SIZE}});
       }
-    } else {
-      queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]] + (offset+TUPLE_SIZE), {f_idx, offset+TUPLE_SIZE}});
     }
   }
 
@@ -302,6 +304,8 @@ void externalSort(int output_fd)
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset)
 {
   size_t total_read = 0;
+
+  posix_fadvise(fd, offset, nbyte, POSIX_FADV_SEQUENTIAL);
   while (nbyte) {
     size_t ret  = pread(fd, buf, nbyte, offset);
     nbyte      -= ret;
