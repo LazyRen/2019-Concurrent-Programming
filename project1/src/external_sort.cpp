@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
 #endif
 
   // read data from input file & start sorting
-  if (total_file == 1) {
+  if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
     #pragma omp parallel for num_threads(MAX_THREADS)
     for (size_t i = 0; i < MAX_THREADS; i++) {
       if (i == MAX_THREADS - 1)
@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     }
 
     parallelSort(tuples, total_tuples);
-  } else {//total_file > 1 : create .tmp files
+  } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
       for (size_t i = 0; i < MAX_THREADS; i++) {
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
       }
 
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
-      if (cur_file != total_file - 1) {
+      if (cur_file != total_file - 1) {// create total_file - 1 .tmp files. leave 1 in memory.
         string outfile = to_string(cur_file) + ".tmp";
         tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
         if (tmp_fd[cur_file] == -1) {
@@ -150,8 +150,10 @@ void mergeSort(int pid, int l, int r)
 
 void parallelRead(int pid, int input_fd, size_t start, size_t end)
 {
-  size_t buf_size = min(FILE_THRESHOLD, end - start);
+  posix_fadvise(input_fd, start, end - start, POSIX_FADV_SEQUENTIAL);
+  size_t buf_size = end - start;
   unsigned char *buffer = new unsigned char[buf_size];
+
   for (size_t cur_offset = start; cur_offset < end;) {
     if (cur_offset + buf_size > end)
       buf_size = (end - cur_offset);
@@ -208,6 +210,7 @@ void externalSort(int output_fd)
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
   unsigned char ***tmp_tuples = new unsigned char**[wrriten_files];
   unsigned char **write_buf = new unsigned char*[2];
+  bool is_first_writing = true;
 
   for (int i = 0; i < wrriten_files; i++) {
     tmp_tuples[i] = new unsigned char*[2];
@@ -218,8 +221,7 @@ void externalSort(int output_fd)
   for (int i = 0; i < 2; i++)
     write_buf[i] = new unsigned char[W_BUFFER_SIZE];
 
-  write = async(writeToFile, -1, (void*)0, 0, 0);
-
+  // open created .tmp files
   for (int i = 0; i < wrriten_files; i++) {
     is_done[i] = false;
     tmp_swi[i] = 0;
@@ -231,6 +233,7 @@ void externalSort(int output_fd)
     read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][0], BUFFER_SIZE, 0);
   }
 
+  // fill double buffer for .tmp files
   for (int i = 0; i < wrriten_files; i++) {
     tmp_files[i].cur_offset += read[i].get();
 #ifdef VERBOSE
@@ -242,6 +245,7 @@ void externalSort(int output_fd)
   }
   queue.push({tuples[0], {wrriten_files, 0}});
 
+  // sort external files by popping least key TUPLE from queue & write to output file
   while (!queue.empty()) {
     auto min_tuple = queue.top(); queue.pop();
     int f_idx = min_tuple.second.first; size_t offset = min_tuple.second.second;
@@ -254,7 +258,11 @@ void externalSort(int output_fd)
       if (!isSorted(write_buf[write_swi], write_idx))
         printf("error: write buffer is not sorted!\n");
 #endif
-      total_write += write.get();
+      if (is_first_writing)
+        is_first_writing = false;
+      else
+        total_write += write.get();
+
       if (total_write + write_idx < total_tuples * TUPLE_SIZE)
         write = async(writeToFile, output_fd, write_buf[write_swi], write_idx, total_write);
       else
@@ -262,6 +270,8 @@ void externalSort(int output_fd)
       write_idx = 0;
       write_swi = (write_swi+1) % 2;
     }
+
+    // push next tuple of current poped one.
     if (f_idx == wrriten_files) {
       if (offset + TUPLE_SIZE < chunk_per_file) {
         queue.push({tuples[offset/TUPLE_SIZE + 1], {f_idx, offset + TUPLE_SIZE}});
