@@ -41,9 +41,8 @@ int main(int argc, char* argv[])
       else
         parallelRead(i, input_fd, i*chunk_per_thread, (i+1)*chunk_per_thread);
     }
-    printf("sorting!\n");
+
     parallelSort(tuples, total_tuples);
-    printf("sorting! done\n");
   } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
