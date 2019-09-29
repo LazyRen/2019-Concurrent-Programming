@@ -34,12 +34,16 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
-    readFromFile(input_fd, tuples, file_size, 0);
+    #pragma omp parallel for num_threads(MAX_THREADS)
+    for (size_t i = 0; i < MAX_THREADS; i++)
+      readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
 
     parallelSort(tuples, total_tuples);
   } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
-      readFromFile(input_fd, tuples, chunk_per_file, chunk_per_file*cur_file);
+      #pragma omp parallel for num_threads(MAX_THREADS)
+      for (size_t i = 0; i < MAX_THREADS; i++)
+        readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, (chunk_per_file*cur_file) + (i*chunk_per_thread));
 
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
       if (cur_file != total_file - 1) {// create total_file - 1 .tmp files. leave 1 in memory.
