@@ -4,13 +4,13 @@
 #include <cstring>
 #include <fcntl.h>
 #include <future>
+#include <omp.h>
 #include <queue>
 #include <string>
 #include <thread>
 #include <unistd.h>
 #include <utility>
 #include <vector>
-#include <omp.h>
 #ifdef VERBOSE
 #include <chrono>
 #include <iostream>
@@ -109,9 +109,7 @@ void parallelSort(TUPLETYPE* tuples, size_t count);
 void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);
-bool isSorted(unsigned char *buf, size_t nbyte);
 void printKey(TUPLETYPE tuple);
-void printKeys(int left, int right);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
 {
