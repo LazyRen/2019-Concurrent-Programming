@@ -34,29 +34,12 @@ int main(int argc, char* argv[])
 
   // read data from input file & start sorting
   if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
-    #pragma omp parallel for num_threads(MAX_THREADS)
-    for (size_t i = 0; i < MAX_THREADS; i++) {
-      if (i == MAX_THREADS - 1)
-        parallelRead(i, input_fd, i*chunk_per_thread, chunk_per_file);
-      else
-        parallelRead(i, input_fd, i*chunk_per_thread, (i+1)*chunk_per_thread);
-    }
+    readFromFile(input_fd, tuples, file_size, 0);
 
     parallelSort(tuples, total_tuples);
   } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
-      #pragma omp parallel for num_threads(MAX_THREADS)
-      for (size_t i = 0; i < MAX_THREADS; i++) {
-        if (i == MAX_THREADS - 1) {
-          parallelRead(i, input_fd,
-                  (chunk_per_file*cur_file) + (i*chunk_per_thread),
-                  (chunk_per_file*(cur_file+1)));
-        } else {
-          parallelRead(i, input_fd,
-                      (chunk_per_file*cur_file) + (i*chunk_per_thread),
-                      (chunk_per_file*cur_file) + ((i+1)*chunk_per_thread));
-        }
-      }
+      readFromFile(input_fd, tuples, chunk_per_file, chunk_per_file*cur_file);
 
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
       if (cur_file != total_file - 1) {// create total_file - 1 .tmp files. leave 1 in memory.
@@ -112,19 +95,6 @@ int main(int argc, char* argv[])
   close(output_fd);
 
   return 0;
-}
-
-void parallelRead(int pid, int input_fd, size_t start, size_t end)
-{
-  posix_fadvise(input_fd, start, end - start, POSIX_FADV_SEQUENTIAL);
-  size_t buf_size = end - start;
-
-  for (size_t cur_offset = start; cur_offset < end;) {
-    if (cur_offset + buf_size > end)
-      buf_size = (end - cur_offset);
-    size_t ret = pread(input_fd, tuples + (cur_offset%chunk_per_file)/TUPLE_SIZE, buf_size, cur_offset);
-    cur_offset += ret;
-  }
 }
 
 void parallelSort(TUPLETYPE* tuples, size_t count)
