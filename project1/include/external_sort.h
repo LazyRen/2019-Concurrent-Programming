@@ -1,3 +1,6 @@
+#ifndef EXTERNAL_SORT_H
+#define EXTERNAL_SORT_H
+
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -18,14 +21,12 @@ using namespace std::chrono;
 #endif
 using namespace std;
 
-#ifndef EXTERNAL_SORT_H
-#define EXTERNAL_SORT_H
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
 #define MAX_THREADS     (32)
-#define FILE_THRESHOLD  (500000000UL)
+#define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
-#define W_BUFFER_SIZE   (100000000UL)
+#define W_BUFFER_SIZE   (200000000UL)
 
 class KEYTYPE {
 public:
