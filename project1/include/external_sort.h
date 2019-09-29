@@ -22,7 +22,7 @@ using namespace std;
 #define EXTERNAL_SORT_H
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
-#define MAX_THREADS     (16)
+#define MAX_THREADS     (32)
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (200000000UL)
@@ -103,7 +103,6 @@ size_t total_tuples;
 size_t chunk_per_file;
 size_t chunk_per_thread;
 
-void mergeSort(int pid, int l, int r);
 void parallelRead(int pid, int input_fd, size_t start, size_t end);
 void parallelSort(TUPLETYPE* tuples, size_t count);
 void externalSort(int output_fd);
@@ -113,23 +112,20 @@ void printKey(TUPLETYPE tuple);
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
 {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp < 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0)
     return true;
   return false;
 }
 
 bool operator<= (const KEYTYPE &k1,const KEYTYPE &k2) {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp <= 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
     return true;
   return false;
 }
 
 bool operator> (const KEYTYPE &k1,const KEYTYPE &k2)
 {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp > 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) > 0)
     return true;
   return false;
 }
@@ -143,30 +139,26 @@ bool operator>= (const KEYTYPE &k1,const KEYTYPE &k2) {
 
 bool operator< (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp < 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0)
     return true;
   return false;
 }
 
 bool operator<= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp <= 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
     return true;
   return false;
 }
 
 bool operator> (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp > 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) > 0)
     return true;
   return false;
 }
 
 bool operator>= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp >= 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) >= 0)
     return true;
   return false;
 }

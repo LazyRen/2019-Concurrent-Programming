@@ -41,8 +41,9 @@ int main(int argc, char* argv[])
       else
         parallelRead(i, input_fd, i*chunk_per_thread, (i+1)*chunk_per_thread);
     }
-
+    printf("sorting!\n");
     parallelSort(tuples, total_tuples);
+    printf("sorting! done\n");
   } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
@@ -114,40 +115,6 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-void mergeSort(int pid, int l, int r)
-{
-  if (l < r) {
-    kx::radix_sort(tuples+l, tuples+r, RadixTraits());
-  }
-
-  for (int div = 2; div <= MAX_THREADS; div *= 2) {
-    if (pid % div == div - 1) {
-      for (int i = 1; i < div; i++) {
-        if (th[pid-i].joinable()) {
-          try {
-            th[pid-i].join();
-          } catch (const exception& ex) {
-            printf("pid%d catched error while %d merging\n", pid, div);
-          }
-        }
-      }
-      int m;
-      if (pid != MAX_THREADS - 1) {
-        l = (chunk_per_thread / TUPLE_SIZE) * (pid+1 - div);
-        m = l + (r - 1 - l) / 2;
-      } else {
-        m = l-1;
-        l = (chunk_per_thread / TUPLE_SIZE) * (pid+1 - div);
-      }
-      inplace_merge(tuples+l, tuples+m+1, tuples+r);
-#ifdef VERBOSE
-      if (!is_sorted(tuples+l, tuples+r))
-        printf("error: merging %d ~ %d is not sorted!\n", l, r);
-#endif
-    };
-  }
-}
-
 void parallelRead(int pid, int input_fd, size_t start, size_t end)
 {
   posix_fadvise(input_fd, start, end - start, POSIX_FADV_SEQUENTIAL);
@@ -159,15 +126,6 @@ void parallelRead(int pid, int input_fd, size_t start, size_t end)
     size_t ret = pread(input_fd, tuples + (cur_offset%chunk_per_file)/TUPLE_SIZE, buf_size, cur_offset);
     cur_offset += ret;
   }
-
-  /*
-  while (start >= chunk_per_file)
-    start -= chunk_per_file;
-  while (end > chunk_per_file)
-    end -= chunk_per_file;
-
-  mergeSort(pid, start/TUPLE_SIZE, end/TUPLE_SIZE);
-  */
 }
 
 void parallelSort(TUPLETYPE* tuples, size_t count)
@@ -179,7 +137,7 @@ void parallelSort(TUPLETYPE* tuples, size_t count)
   for (int i = 1; i < MAX_THREADS; i++) {
     unsigned char key[100];
     memset(key, 0, sizeof(key));
-    key[0] = i * MAX_THREADS;
+    key[0] = i * 256/MAX_THREADS;
     TUPLETYPE tmp(key);
     auto idx = lower_bound(tuples, tuples+count, tmp);
     partition[i-1] = idx - tuples;
@@ -203,12 +161,11 @@ void externalSort(int output_fd)
   size_t total_write = 0, write_idx = 0, write_swi = 0;
   future<size_t> read[written_files], write;
   priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
-  TUPLETYPE ***tmp_tuples = new TUPLETYPE**[written_files];
-  TUPLETYPE **write_buf = new TUPLETYPE*[2];
+  TUPLETYPE *tmp_tuples[written_files][2];
+  TUPLETYPE *write_buf[2];
   bool is_first_writing = true;
 
   for (int i = 0; i < written_files; i++) {
-    tmp_tuples[i] = new TUPLETYPE*[2];
     for (int j = 0; j < 2; j++)
       tmp_tuples[i][j] = new TUPLETYPE[BUFFER_SIZE/TUPLE_SIZE];
   }
@@ -240,7 +197,6 @@ void externalSort(int output_fd)
   while (!queue.empty()) {
     auto min_tuple = queue.top(); queue.pop();
     int f_idx = min_tuple.second.first; size_t offset = min_tuple.second.second;
-    // memcpy(write_buf[write_swi] + write_idx, min_tuple.first.binary, TUPLE_SIZE);
     write_buf[write_swi][write_idx/TUPLE_SIZE] = min_tuple.first;
     write_idx += TUPLE_SIZE;
 
@@ -292,19 +248,17 @@ void externalSort(int output_fd)
   for (int i = 0; i < written_files; i++) {
     for (int j = 0; j < 2; j++)
       delete[] tmp_tuples[i][j];
-    delete[] tmp_tuples[i];
   }
   for (int i = 0; i < 2; i++)
     delete[] write_buf[i];
-  delete[] write_buf;
 }
 
 
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset)
 {
+  posix_fadvise(fd, offset, nbyte, POSIX_FADV_SEQUENTIAL);
   size_t total_read = 0;
 
-  posix_fadvise(fd, offset, nbyte, POSIX_FADV_SEQUENTIAL);
   while (nbyte) {
     size_t ret  = pread(fd, buf, nbyte, offset);
     nbyte      -= ret;
