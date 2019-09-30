@@ -133,7 +133,7 @@ void externalSort(int output_fd)
   int tmp_fd[written_files], tmp_swi[written_files];
   size_t total_write = 0, write_idx = 0, write_swi = 0;
   future<size_t> read[written_files], write;
-  priority_queue<pair<TUPLETYPE, pair<int, size_t> >, vector<pair<TUPLETYPE, pair<int, size_t> > >, greater<pair<TUPLETYPE, pair<int, size_t> > > > queue;// {TUPLE, {file_idx, buf_idx}}
+  priority_queue<pair<TUPLETYPE*, pair<int, size_t> >, vector<pair<TUPLETYPE*, pair<int, size_t> > >, pq_cmp > queue;// {TUPLE, {file_idx, buf_idx}}
   TUPLETYPE *tmp_tuples[written_files][2];
   TUPLETYPE *write_buf[2];
   bool is_first_writing = true;
@@ -161,16 +161,16 @@ void externalSort(int output_fd)
   // fill double buffer for .tmp files
   for (int i = 0; i < written_files; i++) {
     tmp_files[i].cur_offset += read[i].get();
-    queue.push({tmp_tuples[i][0][0], {i, 0}});
+    queue.push({&tmp_tuples[i][0][0], {i, 0}});
     read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][1], BUFFER_SIZE, tmp_files[i].cur_offset);
   }
-  queue.push({tuples[0], {written_files, 0}});
+  queue.push({&tuples[0], {written_files, 0}});
 
   // sort external files by popping least key TUPLE from queue & write to output file
   while (!queue.empty()) {
     auto min_tuple = queue.top(); queue.pop();
     int f_idx = min_tuple.second.first; size_t offset = min_tuple.second.second;
-    write_buf[write_swi][write_idx/TUPLE_SIZE] = min_tuple.first;
+    write_buf[write_swi][write_idx/TUPLE_SIZE] = *min_tuple.first;
     write_idx += TUPLE_SIZE;
 
     // write buffer is full. Flush to disk.
@@ -191,7 +191,7 @@ void externalSort(int output_fd)
     // push next tuple of current poped one.
     if (f_idx == written_files) {
       if (offset + TUPLE_SIZE < chunk_per_file) {
-        queue.push({tuples[offset/TUPLE_SIZE + 1], {f_idx, offset + TUPLE_SIZE}});
+        queue.push({&tuples[offset/TUPLE_SIZE + 1], {f_idx, offset + TUPLE_SIZE}});
       }
     } else {
       if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
@@ -201,7 +201,7 @@ void externalSort(int output_fd)
           read[f_idx] = async(readFromFile, tmp_fd[f_idx], tmp_tuples[f_idx][tmp_swi[f_idx]],
                               BUFFER_SIZE, tmp_files[f_idx].cur_offset);
           tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
-          queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
+          queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
 
           if (tmp_files[f_idx].cur_offset + BUFFER_SIZE >= tmp_files[f_idx].size)
             is_done[f_idx] = true;
@@ -209,11 +209,11 @@ void externalSort(int output_fd)
           if (tmp_files[f_idx].cur_offset < tmp_files[f_idx].size) {
             tmp_files[f_idx].cur_offset += read[f_idx].get();
             tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
-            queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
+            queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
           }
         }
       } else {
-        queue.push({tmp_tuples[f_idx][tmp_swi[f_idx]][offset/TUPLE_SIZE+1], {f_idx, offset+TUPLE_SIZE}});
+        queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][offset/TUPLE_SIZE+1], {f_idx, offset+TUPLE_SIZE}});
       }
     }
   }

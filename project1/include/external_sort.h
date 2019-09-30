@@ -23,7 +23,7 @@ using namespace std;
 
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
-#define MAX_THREADS     (32)
+#define MAX_THREADS     (16)
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (200000000UL)
@@ -58,6 +58,13 @@ public:
 
   void assign(unsigned char* binary) {
     memcpy(this->binary, binary, TUPLE_SIZE);
+  }
+
+  bool operator> (const TUPLETYPE &other)
+  {
+    if (memcmp(this->binary, other.binary, KEY_SIZE) > 0)
+      return true;
+    return false;
   }
 };
 
@@ -109,6 +116,13 @@ void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);
 void printKey(TUPLETYPE tuple);
+
+struct pq_cmp {
+    bool operator()(pair<TUPLETYPE*, pair<int, size_t> > &t1, pair<TUPLETYPE*, pair<int, size_t> > &t2)
+    {
+      return *t1.first > *t2.first;
+    }
+};
 
 bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
 {
