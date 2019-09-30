@@ -32,11 +32,7 @@ int main(int argc, char* argv[])
     printf("error: open output file\n");
     exit(0);
   }
-  size_t ret = ftruncate(output_fd, file_size);
-  if (ret == static_cast<size_t>(-1)) {
-    printf("error: resizing output file to %zu failed\n", file_size);
-    exit(0);
-  }
+  posix_fallocate(output_fd, 0, file_size);
 
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
@@ -68,11 +64,7 @@ int main(int argc, char* argv[])
 
         size_t to_write = file_size / total_file;
         tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-        size_t ret = ftruncate(tmp_fd[cur_file], to_write);
-        if (ret == static_cast<size_t>(-1)) {
-          printf("error: resizing output file to %zu failed\n", to_write);
-          exit(0);
-        }
+        posix_fallocate(tmp_fd[cur_file], 0, to_write);
 
         parallelSort(tuples, chunk_per_file/TUPLE_SIZE, true, tmp_fd[cur_file]);
       }
@@ -239,6 +231,7 @@ void externalSort(int output_fd)
 
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset)
 {
+  posix_fadvise(fd, offset, nbyte, POSIX_FADV_WILLNEED);
   posix_fadvise(fd, offset, nbyte, POSIX_FADV_SEQUENTIAL);
   size_t total_read = 0;
 
