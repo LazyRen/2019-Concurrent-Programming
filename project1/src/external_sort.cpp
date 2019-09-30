@@ -24,6 +24,19 @@ int main(int argc, char* argv[])
   chunk_per_thread = chunk_per_file / MAX_THREADS;
   tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
   int tmp_fd[total_file - 1];
+  future<size_t> tmp_write[total_file - 1];
+
+  // open output file.
+  int output_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+  if (output_fd == -1) {
+    printf("error: open output file\n");
+    exit(0);
+  }
+  size_t ret = ftruncate(output_fd, file_size);
+  if (ret == static_cast<size_t>(-1)) {
+    printf("error: resizing output file to %zu failed\n", file_size);
+    exit(0);
+  }
 
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
@@ -38,14 +51,13 @@ int main(int argc, char* argv[])
     for (size_t i = 0; i < MAX_THREADS; i++)
       readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
 
-    parallelSort(tuples, total_tuples);
+    parallelSort(tuples, total_tuples, true, output_fd);
   } else {// total_file > 1 : create .tmp files
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
       for (size_t i = 0; i < MAX_THREADS; i++)
         readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, (chunk_per_file*cur_file) + (i*chunk_per_thread));
 
-      parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
       if (cur_file != total_file - 1) {// create total_file - 1 .tmp files. leave 1 in memory.
         string outfile = to_string(cur_file) + ".tmp";
         tmp_fd[cur_file] = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0777);
@@ -56,8 +68,15 @@ int main(int argc, char* argv[])
 
         size_t to_write = file_size / total_file;
         tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-        writeToFile(tmp_fd[cur_file], tuples, to_write, 0);
+        size_t ret = ftruncate(tmp_fd[cur_file], to_write);
+        if (ret == static_cast<size_t>(-1)) {
+          printf("error: resizing output file to %zu failed\n", to_write);
+          exit(0);
+        }
+
+        parallelSort(tuples, chunk_per_file/TUPLE_SIZE, true, tmp_fd[cur_file]);
       }
+      parallelSort(tuples, chunk_per_file/TUPLE_SIZE, false, -1);
     }
   }
 
@@ -67,24 +86,11 @@ int main(int argc, char* argv[])
   cout << "read & sort took " << duration.count() << "ms\n";
 #endif
 
-  // open output file.
-  int output_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0777);
-  if (output_fd == -1) {
-    printf("error: open output file\n");
-    exit(0);
-  }
-  size_t ret = ftruncate(output_fd, file_size);
-  if (ret == static_cast<size_t>(-1)) {
-    printf("error: resizing output file to %zu failed\n", file_size);
-    exit(0);
-  }
-
   // flush to output file.
-  if (total_file == 1) {
-    writeToFile(output_fd, tuples, file_size, 0);
-  } else {
+  if (total_file != 1) {
     externalSort(output_fd);
   }
+
 #ifdef VERBOSE
   auto stopTime2 = high_resolution_clock::now();
   duration = duration_cast<milliseconds>(stopTime2 - stopTime);
@@ -101,7 +107,7 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-void parallelSort(TUPLETYPE* tuples, size_t count)
+void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
 {
   kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
   size_t partition[MAX_THREADS];
@@ -122,6 +128,10 @@ void parallelSort(TUPLETYPE* tuples, size_t count)
     size_t prev = i == 0 ? 0 : partition[i-1];
 
     kx::radix_sort(tuples+prev, tuples+partition[i], RadixTraits());
+
+    if (isWrite && fd >= 0) {
+      writeToFile(fd, tuples+prev, (partition[i]-prev) * TUPLE_SIZE, prev*TUPLE_SIZE);
+    }
   }
 
 }

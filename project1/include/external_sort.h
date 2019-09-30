@@ -111,7 +111,7 @@ size_t total_tuples;
 size_t chunk_per_file;
 size_t chunk_per_thread;
 
-void parallelSort(TUPLETYPE* tuples, size_t count);
+void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd);
 void externalSort(int output_fd);
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset);
 size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset);
