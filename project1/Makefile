@@ -8,7 +8,7 @@ INC = ./include/
 LIB = ./lib/
 
 TARGET = run
-override CFLAGS += -Wall -g -O2 -std=c++14 -I$(INC) -L$(LIB) -lpthread -fopenmp
+override CFLAGS += -Wall -g -O2 -std=c++14 -I$(INC) -L$(LIB) -lpthread -fopenmp -DVERBOSE
 
 all: $(TARGET)
 
