@@ -28,23 +28,7 @@ using namespace std;
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (200000000UL)
 
-class KEYTYPE {
-public:
-  unsigned char binary[KEY_SIZE];
-  unsigned int index;
-
-  KEYTYPE() {};
-
-  KEYTYPE(unsigned char* binary, int index) {
-    memcpy(this->binary, binary, KEY_SIZE);
-    this->index = index;
-  }
-
-  void assign(unsigned char* binary, int index) {
-    memcpy(this->binary, binary, KEY_SIZE);
-    this->index = index;
-  }
-};
+int keycmp(const void* ptr1, const void* ptr2, size_t count);
 
 class TUPLETYPE {
 public:
@@ -56,13 +40,9 @@ public:
     memcpy(this->binary, binary, TUPLE_SIZE);
   }
 
-  void assign(unsigned char* binary) {
-    memcpy(this->binary, binary, TUPLE_SIZE);
-  }
-
   bool operator> (const TUPLETYPE &other)
   {
-    if (memcmp(this->binary, other.binary, KEY_SIZE) > 0)
+    if (keycmp(this->binary, other.binary, KEY_SIZE) > 0)
       return true;
     return false;
   }
@@ -87,7 +67,7 @@ struct RadixTraits
         return x.binary[KEY_SIZE - 2 - k] & ((unsigned char) 0xFF);
     }
     bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
-        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+        return (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0);
     }
 };
 
@@ -99,7 +79,7 @@ struct OneByteRadixTraits
         return x.binary[k] & ((unsigned char) 0xFF);
     }
     bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
-        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+        return (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0);
     }
 };
 
@@ -124,55 +104,28 @@ struct pq_cmp {
     }
 };
 
-bool operator< (const KEYTYPE &k1,const KEYTYPE &k2)
-{
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0)
-    return true;
-  return false;
-}
-
-bool operator<= (const KEYTYPE &k1,const KEYTYPE &k2) {
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
-    return true;
-  return false;
-}
-
-bool operator> (const KEYTYPE &k1,const KEYTYPE &k2)
-{
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) > 0)
-    return true;
-  return false;
-}
-
-bool operator>= (const KEYTYPE &k1,const KEYTYPE &k2) {
-  int cmp = memcmp(k1.binary, k2.binary, KEY_SIZE);
-  if (cmp >= 0)
-    return true;
-  return false;
-}
-
 bool operator< (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0)
+  if (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0)
     return true;
   return false;
 }
 
 bool operator<= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
+  if (keycmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
     return true;
   return false;
 }
 
 bool operator> (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) > 0)
+  if (keycmp(k1.binary, k2.binary, KEY_SIZE) > 0)
     return true;
   return false;
 }
 
 bool operator>= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  if (memcmp(k1.binary, k2.binary, KEY_SIZE) >= 0)
+  if (keycmp(k1.binary, k2.binary, KEY_SIZE) >= 0)
     return true;
   return false;
 }

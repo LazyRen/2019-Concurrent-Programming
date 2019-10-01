@@ -267,6 +267,19 @@ size_t writeToFile(int fd, const void *buf, size_t nbyte, size_t offset)
   return total_write;
 }
 
+int keycmp(const void* ptr1, const void* ptr2, size_t count)
+{
+  register const unsigned char *s1 = (const unsigned char*)ptr1;
+  register const unsigned char *s2 = (const unsigned char*)ptr2;
+
+  while (count-- > 0)
+    {
+      if (*s1++ != *s2++)
+	  return s1[-1] < s2[-1] ? -1 : 1;
+    }
+  return 0;
+}
+
 void printKey(TUPLETYPE tuple)
 {
   for (int j = 0; j < 10; j++)
