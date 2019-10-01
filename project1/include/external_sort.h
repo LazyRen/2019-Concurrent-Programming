@@ -23,12 +23,10 @@ using namespace std;
 
 #define KEY_SIZE        (10UL)
 #define TUPLE_SIZE      (100UL)
-#define MAX_THREADS     (16)
+#define MAX_THREADS     (64)
 #define FILE_THRESHOLD  (1000000000UL)
 #define BUFFER_SIZE     (100000000UL)
 #define W_BUFFER_SIZE   (200000000UL)
-
-int keycmp(const void* ptr1, const void* ptr2, size_t count);
 
 class TUPLETYPE {
 public:
@@ -42,7 +40,7 @@ public:
 
   bool operator> (const TUPLETYPE &other)
   {
-    if (keycmp(this->binary, other.binary, KEY_SIZE) > 0)
+    if (memcmp(this->binary, other.binary, KEY_SIZE) > 0)
       return true;
     return false;
   }
@@ -67,7 +65,7 @@ struct RadixTraits
         return x.binary[KEY_SIZE - 2 - k] & ((unsigned char) 0xFF);
     }
     bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
-        return (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
     }
 };
 
@@ -79,7 +77,7 @@ struct OneByteRadixTraits
         return x.binary[k] & ((unsigned char) 0xFF);
     }
     bool compare(const TUPLETYPE& k1, const TUPLETYPE& k2) {
-        return (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0);
+        return (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0);
     }
 };
 
@@ -106,26 +104,26 @@ struct pq_cmp {
 
 bool operator< (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  if (keycmp(k1.binary, k2.binary, KEY_SIZE) < 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) < 0)
     return true;
   return false;
 }
 
 bool operator<= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  if (keycmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) <= 0)
     return true;
   return false;
 }
 
 bool operator> (const TUPLETYPE &k1,const TUPLETYPE &k2)
 {
-  if (keycmp(k1.binary, k2.binary, KEY_SIZE) > 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) > 0)
     return true;
   return false;
 }
 
 bool operator>= (const TUPLETYPE &k1,const TUPLETYPE &k2) {
-  if (keycmp(k1.binary, k2.binary, KEY_SIZE) >= 0)
+  if (memcmp(k1.binary, k2.binary, KEY_SIZE) >= 0)
     return true;
   return false;
 }
