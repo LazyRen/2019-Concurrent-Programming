@@ -35,18 +35,19 @@ int main(int argc, char* argv[])
   if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
     tuples = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
 
-    #pragma omp parallel for num_threads(MAX_THREADS)
-    for (size_t i = 0; i < MAX_THREADS; i++)
-      readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
-
+    // #pragma omp parallel for num_threads(MAX_THREADS)
+    // for (size_t i = 0; i < MAX_THREADS; i++)
+    //   readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
+    readFromFile(input_fd, tuples, file_size, 0);
     parallelSort(tuples, total_tuples);
   } else if (total_file == 2) {
     tuples = new TUPLETYPE[file_size/TUPLE_SIZE];
     chunk_per_thread = file_size / MAX_THREADS;
 
-    #pragma omp parallel for num_threads(MAX_THREADS)
-    for (size_t i = 0; i < MAX_THREADS; i++)
-      readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
+    // #pragma omp parallel for num_threads(MAX_THREADS)
+    // for (size_t i = 0; i < MAX_THREADS; i++)
+    //   readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
+    readFromFile(input_fd, tuples, file_size, 0);
 
     parallelSort(tuples, total_tuples);
   } else {// total_file > 2 : create .tmp files
@@ -56,9 +57,10 @@ int main(int argc, char* argv[])
         read_buf[i][j] = new TUPLETYPE[BUFFER_SIZE/TUPLE_SIZE];
 
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
-      #pragma omp parallel for num_threads(MAX_THREADS)
-      for (size_t i = 0; i < MAX_THREADS; i++)
-        readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, (chunk_per_file*cur_file) + (i*chunk_per_thread));
+      // #pragma omp parallel for num_threads(MAX_THREADS)
+      // for (size_t i = 0; i < MAX_THREADS; i++)
+      //   readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, (chunk_per_file*cur_file) + (i*chunk_per_thread));
+      readFromFile(input_fd, tuples, chunk_per_file, 0);
 
       if (cur_file != total_file - 1) {// create total_file - 1 .tmp files. leave 1 in memory.
         string outfile = to_string(cur_file) + ".tmp";
@@ -74,7 +76,7 @@ int main(int argc, char* argv[])
 
         memcpy(read_buf[cur_file][0], tuples, BUFFER_SIZE);
         memcpy(read_buf[cur_file][1], tuples + BUFFER_SIZE/TUPLE_SIZE, BUFFER_SIZE);
-        posix_fallocate(tmp_fd[cur_file], 0, chunk_per_file);
+        ftruncate(tmp_fd[cur_file], chunk_per_file - 2*BUFFER_SIZE);
         writeToFile(tmp_fd[cur_file], tuples + 2*BUFFER_SIZE/TUPLE_SIZE, chunk_per_file - 2*BUFFER_SIZE, 0);
         close(tmp_fd[cur_file]);
       }
@@ -94,7 +96,7 @@ int main(int argc, char* argv[])
     printf("error: open output file\n");
     exit(0);
   }
-  posix_fallocate(output_fd, 0, file_size);
+  ftruncate(output_fd, file_size);
 
   // flush to output file.
   if (total_file <= 2) {
