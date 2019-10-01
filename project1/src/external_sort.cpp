@@ -67,6 +67,7 @@ int main(int argc, char* argv[])
         posix_fallocate(tmp_fd[cur_file], 0, to_write);
 
         parallelSort(tuples, chunk_per_file/TUPLE_SIZE, true, tmp_fd[cur_file]);
+        close(tmp_fd[cur_file]);
       }
       parallelSort(tuples, chunk_per_file/TUPLE_SIZE, false, -1);
     }
@@ -110,7 +111,7 @@ void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
     memset(key, 0, sizeof(key));
     key[0] = i * 256/MAX_THREADS;
     TUPLETYPE tmp(key);
-    auto idx = lower_bound(tuples, tuples+count, tmp);
+    auto idx = lower_bound(tuples, tuples + count, tmp);
     partition[i-1] = idx - tuples;
   }
   partition[MAX_THREADS-1] = count;
@@ -122,7 +123,7 @@ void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
     kx::radix_sort(tuples+prev, tuples+partition[i], RadixTraits());
 
     if (isWrite && fd >= 0) {
-      writeToFile(fd, tuples+prev, (partition[i]-prev) * TUPLE_SIZE, prev*TUPLE_SIZE);
+      writeToFile(fd, tuples+prev, (partition[i]-prev) * TUPLE_SIZE, prev * TUPLE_SIZE);
     }
   }
 
@@ -226,6 +227,9 @@ void externalSort(int output_fd)
   }
   for (int i = 0; i < 2; i++)
     delete[] write_buf[i];
+
+  for (int i = 0; i < written_files; i++)
+    close(tmp_fd[i]);
 }
 
 
