@@ -24,14 +24,7 @@ int main(int argc, char* argv[])
   chunk_per_thread = chunk_per_file / MAX_THREADS;
   int tmp_fd[total_file - 1];
   future<size_t> tmp_write[total_file - 1];
-
-  // open output file.
-  int output_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0777);
-  if (output_fd == -1) {
-    printf("error: open output file\n");
-    exit(0);
-  }
-  posix_fallocate(output_fd, 0, file_size);
+  TUPLETYPE *read_buf[total_file - 1][2];
 
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
@@ -41,20 +34,27 @@ int main(int argc, char* argv[])
   // read data from input file & start sorting
   if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
     tuples = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
+
     #pragma omp parallel for num_threads(MAX_THREADS)
     for (size_t i = 0; i < MAX_THREADS; i++)
       readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
 
-    parallelSort(tuples, total_tuples, true, output_fd);
+    parallelSort(tuples, total_tuples);
   } else if (total_file == 2) {
     tuples = new TUPLETYPE[file_size/TUPLE_SIZE];
     chunk_per_thread = file_size / MAX_THREADS;
+
     #pragma omp parallel for num_threads(MAX_THREADS)
     for (size_t i = 0; i < MAX_THREADS; i++)
       readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
-      parallelSort(tuples, total_tuples, true, output_fd);
+
+    parallelSort(tuples, total_tuples);
   } else {// total_file > 2 : create .tmp files
     tuples = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
+    for (int i = 0; i < total_file - 1; i++)
+      for (int j = 0; j < 2; j++)
+        read_buf[i][j] = new TUPLETYPE[BUFFER_SIZE/TUPLE_SIZE];
+
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
       for (size_t i = 0; i < MAX_THREADS; i++)
@@ -68,33 +68,50 @@ int main(int argc, char* argv[])
           exit(0);
         }
 
-        size_t to_write = file_size / total_file;
-        tmp_files.push_back(FILEINFO(outfile, 0, to_write));
-        posix_fallocate(tmp_fd[cur_file], 0, to_write);
+        tmp_files.push_back(FILEINFO(outfile, 0, chunk_per_file - 2*BUFFER_SIZE));
 
-        parallelSort(tuples, chunk_per_file/TUPLE_SIZE, true, tmp_fd[cur_file]);
+        parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
+
+        memcpy(read_buf[cur_file][0], tuples, BUFFER_SIZE);
+        memcpy(read_buf[cur_file][1], tuples + BUFFER_SIZE/TUPLE_SIZE, BUFFER_SIZE);
+        posix_fallocate(tmp_fd[cur_file], 0, chunk_per_file);
+        writeToFile(tmp_fd[cur_file], tuples + 2*BUFFER_SIZE/TUPLE_SIZE, chunk_per_file - 2*BUFFER_SIZE, 0);
         close(tmp_fd[cur_file]);
       }
-      parallelSort(tuples, chunk_per_file/TUPLE_SIZE, false, -1);
+      parallelSort(tuples, chunk_per_file/TUPLE_SIZE);
     }
   }
 
+#ifdef VERBOSE
+  auto stopTime = high_resolution_clock::now();
+  auto duration = duration_cast<milliseconds>(stopTime - startTime);
+  cout << "read & sort took " << duration.count() << "ms\n";
+#endif
+
+  // open output file.
+  int output_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0777);
+  if (output_fd == -1) {
+    printf("error: open output file\n");
+    exit(0);
+  }
+  posix_fallocate(output_fd, 0, file_size);
+
   // flush to output file.
-  if (total_file > 2) {
-#ifdef VERBOSE
-    auto stopTime = high_resolution_clock::now();
-    auto duration = duration_cast<milliseconds>(stopTime - startTime);
-    cout << "read & sort took " << duration.count() << "ms\n";
-#endif
-    externalSort(output_fd);
-#ifdef VERBOSE
-    auto stopTime2 = high_resolution_clock::now();
-    duration = duration_cast<milliseconds>(stopTime2 - stopTime);
-    cout << "file writing took " << duration.count() << "ms\n";
-#endif
+  if (total_file <= 2) {
+    writeToFile(output_fd, tuples, file_size, 0);
+  } else {
+    externalSort(output_fd, read_buf);
+    for (int i = 0; i < total_file - 1; i++) {
+      for (int j = 0; j < 2; j++)
+        delete[] read_buf[i][j];
+    }
   }
 
-
+#ifdef VERBOSE
+  auto stopTime2 = high_resolution_clock::now();
+  duration = duration_cast<milliseconds>(stopTime2 - stopTime);
+  cout << "file writing took " << duration.count() << "ms\n";
+#endif
 
   // free
   delete [] tuples;
@@ -106,11 +123,8 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
+void parallelSort(TUPLETYPE* tuples, size_t count)
 {
-#ifdef VERBOSE
-    auto startTime = high_resolution_clock::now();
-#endif
   kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
   size_t partition[MAX_THREADS];
 
@@ -128,27 +142,11 @@ void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
   #pragma omp parallel for num_threads(MAX_THREADS)
   for (int i = 0; i < MAX_THREADS; i++) {
     size_t prev = i == 0 ? 0 : partition[i-1];
-
     kx::radix_sort(tuples+prev, tuples+partition[i], RadixTraits());
-
-    if (isWrite && fd >= 0) {
-#ifdef VERBOSE
-      auto stopTime = high_resolution_clock::now();
-      auto duration = duration_cast<milliseconds>(stopTime - startTime);
-      cout << "sort took " << duration.count() << "ms\n";
-#endif
-      writeToFile(fd, tuples+prev, (partition[i]-prev) * TUPLE_SIZE, prev * TUPLE_SIZE);
-#ifdef VERBOSE
-      auto stopTime2 = high_resolution_clock::now();
-      duration = duration_cast<milliseconds>(stopTime2 - stopTime);
-      cout << "file writing took " << duration.count() << "ms\n";
-#endif
-    }
   }
-
 }
 
-void externalSort(int output_fd)
+void externalSort(int output_fd, TUPLETYPE* read_buf[][2])
 {
   int written_files = total_file - 1;
   bool is_done[written_files];
@@ -156,14 +154,8 @@ void externalSort(int output_fd)
   size_t total_write = 0, write_idx = 0, write_swi = 0;
   future<size_t> read[written_files], write;
   priority_queue<pair<TUPLETYPE*, pair<int, size_t> >, vector<pair<TUPLETYPE*, pair<int, size_t> > >, pq_cmp > queue;// {TUPLE, {file_idx, buf_idx}}
-  TUPLETYPE *tmp_tuples[written_files][2];
+  bool is_first_writing = true, is_first_reading[written_files];
   TUPLETYPE *write_buf[2];
-  bool is_first_writing = true;
-
-  for (int i = 0; i < written_files; i++) {
-    for (int j = 0; j < 2; j++)
-      tmp_tuples[i][j] = new TUPLETYPE[BUFFER_SIZE/TUPLE_SIZE];
-  }
 
   for (int i = 0; i < 2; i++)
     write_buf[i] = new TUPLETYPE[W_BUFFER_SIZE/TUPLE_SIZE];
@@ -171,21 +163,17 @@ void externalSort(int output_fd)
   // open created .tmp files
   for (int i = 0; i < written_files; i++) {
     is_done[i] = false;
+    is_first_reading[i] = true;
     tmp_swi[i] = 0;
     tmp_fd[i]  = open(tmp_files[i].file_name.c_str(), O_RDONLY);
     if (tmp_fd[i] == -1) {
       printf("error: open %s file\n", tmp_files[i].file_name.c_str());
       exit(0);
     }
-    read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][0], BUFFER_SIZE, 0);
   }
 
-  // fill double buffer for .tmp files
-  for (int i = 0; i < written_files; i++) {
-    tmp_files[i].cur_offset += read[i].get();
-    queue.push({&tmp_tuples[i][0][0], {i, 0}});
-    read[i] = async(readFromFile, tmp_fd[i], tmp_tuples[i][1], BUFFER_SIZE, tmp_files[i].cur_offset);
-  }
+  for (int i = 0; i < written_files; i++)
+    queue.push({&read_buf[i][0][0], {i, 0}});
   queue.push({&tuples[0], {written_files, 0}});
 
   // sort external files by popping least key TUPLE from queue & write to output file
@@ -218,12 +206,15 @@ void externalSort(int output_fd)
     } else {
       if (offset + TUPLE_SIZE >= BUFFER_SIZE) {
         if (!is_done[f_idx]) {
-          tmp_files[f_idx].cur_offset += read[f_idx].get();
+          if (is_first_reading[f_idx])
+            is_first_reading[f_idx] = false;
+          else
+            tmp_files[f_idx].cur_offset += read[f_idx].get();
 
-          read[f_idx] = async(readFromFile, tmp_fd[f_idx], tmp_tuples[f_idx][tmp_swi[f_idx]],
+          read[f_idx] = async(readFromFile, tmp_fd[f_idx], read_buf[f_idx][tmp_swi[f_idx]],
                               BUFFER_SIZE, tmp_files[f_idx].cur_offset);
           tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
-          queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
+          queue.push({&read_buf[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
 
           if (tmp_files[f_idx].cur_offset + BUFFER_SIZE >= tmp_files[f_idx].size)
             is_done[f_idx] = true;
@@ -231,19 +222,15 @@ void externalSort(int output_fd)
           if (tmp_files[f_idx].cur_offset < tmp_files[f_idx].size) {
             tmp_files[f_idx].cur_offset += read[f_idx].get();
             tmp_swi[f_idx] = (tmp_swi[f_idx]+1) % 2;
-            queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
+            queue.push({&read_buf[f_idx][tmp_swi[f_idx]][0], {f_idx, 0}});
           }
         }
       } else {
-        queue.push({&tmp_tuples[f_idx][tmp_swi[f_idx]][offset/TUPLE_SIZE+1], {f_idx, offset+TUPLE_SIZE}});
+        queue.push({&read_buf[f_idx][tmp_swi[f_idx]][offset/TUPLE_SIZE+1], {f_idx, offset+TUPLE_SIZE}});
       }
     }
   }
 
-  for (int i = 0; i < written_files; i++) {
-    for (int j = 0; j < 2; j++)
-      delete[] tmp_tuples[i][j];
-  }
   for (int i = 0; i < 2; i++)
     delete[] write_buf[i];
 
