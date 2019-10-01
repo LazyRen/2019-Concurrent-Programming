@@ -22,7 +22,6 @@ int main(int argc, char* argv[])
   total_tuples     = (file_size / TUPLE_SIZE);
   chunk_per_file   = (file_size / total_file);
   chunk_per_thread = chunk_per_file / MAX_THREADS;
-  tuples           = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
   int tmp_fd[total_file - 1];
   future<size_t> tmp_write[total_file - 1];
 
@@ -36,19 +35,26 @@ int main(int argc, char* argv[])
 
 #ifdef VERBOSE
   printf("file_size: %zu total_tuples: %zu key_per_thread: %zu\n", file_size, total_tuples, chunk_per_thread / TUPLE_SIZE);
-  printf("total_tmp_files: %d, chunk_per_file: %zu\n", total_file, chunk_per_file);
-  printf("tuple array contains %zu keys\n", chunk_per_file/TUPLE_SIZE);
   auto startTime = high_resolution_clock::now();
 #endif
 
   // read data from input file & start sorting
   if (total_file == 1) {// input <= 1GB : inmemory sorting & direct writing
+    tuples = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
     #pragma omp parallel for num_threads(MAX_THREADS)
     for (size_t i = 0; i < MAX_THREADS; i++)
       readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
 
     parallelSort(tuples, total_tuples, true, output_fd);
-  } else {// total_file > 1 : create .tmp files
+  } else if (total_file == 2) {
+    tuples = new TUPLETYPE[file_size/TUPLE_SIZE];
+    chunk_per_thread = file_size / MAX_THREADS;
+    #pragma omp parallel for num_threads(MAX_THREADS)
+    for (size_t i = 0; i < MAX_THREADS; i++)
+      readFromFile(input_fd, &tuples[i*chunk_per_thread/TUPLE_SIZE], chunk_per_thread, i*chunk_per_thread);
+      parallelSort(tuples, total_tuples, true, output_fd);
+  } else {// total_file > 2 : create .tmp files
+    tuples = new TUPLETYPE[chunk_per_file/TUPLE_SIZE];
     for (int cur_file = 0; cur_file < total_file; cur_file++) {
       #pragma omp parallel for num_threads(MAX_THREADS)
       for (size_t i = 0; i < MAX_THREADS; i++)
@@ -73,22 +79,22 @@ int main(int argc, char* argv[])
     }
   }
 
-#ifdef VERBOSE
-  auto stopTime = high_resolution_clock::now();
-  auto duration = duration_cast<milliseconds>(stopTime - startTime);
-  cout << "read & sort took " << duration.count() << "ms\n";
-#endif
-
   // flush to output file.
-  if (total_file != 1) {
+  if (total_file > 2) {
+#ifdef VERBOSE
+    auto stopTime = high_resolution_clock::now();
+    auto duration = duration_cast<milliseconds>(stopTime - startTime);
+    cout << "read & sort took " << duration.count() << "ms\n";
+#endif
     externalSort(output_fd);
+#ifdef VERBOSE
+    auto stopTime2 = high_resolution_clock::now();
+    duration = duration_cast<milliseconds>(stopTime2 - stopTime);
+    cout << "file writing took " << duration.count() << "ms\n";
+#endif
   }
 
-#ifdef VERBOSE
-  auto stopTime2 = high_resolution_clock::now();
-  duration = duration_cast<milliseconds>(stopTime2 - stopTime);
-  cout << "file writing took " << duration.count() << "ms\n";
-#endif
+
 
   // free
   delete [] tuples;
@@ -102,6 +108,9 @@ int main(int argc, char* argv[])
 
 void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
 {
+#ifdef VERBOSE
+    auto startTime = high_resolution_clock::now();
+#endif
   kx::radix_sort(tuples, tuples+count, OneByteRadixTraits());
   size_t partition[MAX_THREADS];
 
@@ -123,7 +132,17 @@ void parallelSort(TUPLETYPE* tuples, size_t count, bool isWrite, int fd)
     kx::radix_sort(tuples+prev, tuples+partition[i], RadixTraits());
 
     if (isWrite && fd >= 0) {
+#ifdef VERBOSE
+      auto stopTime = high_resolution_clock::now();
+      auto duration = duration_cast<milliseconds>(stopTime - startTime);
+      cout << "sort took " << duration.count() << "ms\n";
+#endif
       writeToFile(fd, tuples+prev, (partition[i]-prev) * TUPLE_SIZE, prev * TUPLE_SIZE);
+#ifdef VERBOSE
+      auto stopTime2 = high_resolution_clock::now();
+      duration = duration_cast<milliseconds>(stopTime2 - stopTime);
+      cout << "file writing took " << duration.count() << "ms\n";
+#endif
     }
   }
 
@@ -231,7 +250,6 @@ void externalSort(int output_fd)
   for (int i = 0; i < written_files; i++)
     close(tmp_fd[i]);
 }
-
 
 size_t readFromFile(int fd, void *buf, size_t nbyte, size_t offset)
 {
