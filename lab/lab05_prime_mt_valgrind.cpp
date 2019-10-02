@@ -40,7 +40,7 @@ void* ThreadFunc(void* arg) {
         }
     }
 
-    thread_ret[0] = cnt_prime;
+    thread_ret[tid] = cnt_prime;
 
     return NULL;
 }
@@ -53,13 +53,13 @@ int main(void) {
         // Input range
         scanf("%d", &range_start);
         if (range_start == -1) {
-            thread_ret = NULL;
-            break;
+            free(thread_ret);
+	    break;
         }
         scanf("%d", &range_end);
 
         // Create threads to work
-        for (long i = 0; i <= NUM_THREAD; i++) {
+        for (long i = 0; i < NUM_THREAD; i++) {
             if (pthread_create(&threads[i], 0, ThreadFunc, (void*)i) < 0) {
                 printf("pthread_create error!\n");
                 return 0;
