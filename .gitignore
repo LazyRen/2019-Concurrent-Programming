@@ -13,6 +13,7 @@
 *.dSYM
 *.swp
 *.tmp
+./project2/thread*.txt
 
 # Executables
 *.exe
