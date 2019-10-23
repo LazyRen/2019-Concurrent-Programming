@@ -17,3 +17,4 @@ $(TARGET): $(SRCS) $(INCS)
 # Delete binary & object files
 clean:
 	$(RM) $(TARGET) $(OBJS)
+	$(RM) thread*.txt

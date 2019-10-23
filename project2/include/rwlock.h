@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <queue>
 #include <random>
 #include <string>
 #include <thread>
@@ -62,9 +63,11 @@ vector<ThreadInfo> thread_infos;
 
 int GetRandomNumber(int maxi);
 bool CanWakeUp(int tid, int rid, LockType lock_type);
-void AcquireReadLock(int tid, int rid);
+vector<int> GetWaitingList(int tid, int rid);
+bool DeadlockCheck(int tid);
+bool AcquireReadLock(int tid, int rid);
 void ReleaseReadLock(int tid, int rid);
-void AcquireWriteLock(int tid, int rid);
+bool AcquireWriteLock(int tid, int rid);
 void ReleaseWriteLock(int tid, int rid);
 void ThreadFunc(int tid);
 #endif
