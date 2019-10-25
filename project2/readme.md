@@ -8,7 +8,7 @@
 * [Implementation](#implementation)
   * [Tasks](#tasks)
   * [Classes](#classes)
-  * [Read/Write Lock](#read/write-lock)
+  * [Read/Write Lock](#readwrite-lock)
 * [Validation](#validation)
 
 
