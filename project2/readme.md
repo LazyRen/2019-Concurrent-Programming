@@ -157,6 +157,8 @@ void ReleaseWriteLock(int tid, int rid);
 
 It first emplace new lock object to back of the specified record's deque.<br>And also updates ThreadInfo's lock information for future deadlock check.<br>**Note** that if deadlock has been found during the execution, function will remove created lock object from record's deque & ThreadInfo and return false.
 
+![acquire_lock](./assets/acquire_lock.png)
+
 * read lock<br>
   * Acquire without wait
     If there is no write lock in current record's deque, lock is obtained, and can be proceed.
