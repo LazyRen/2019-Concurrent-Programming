@@ -94,13 +94,9 @@ So instead of read&writing 4GB of tmp files, it only have to read&write 2400MB.
 
 As my code implements new technique, the performance of the program got better. Here is some changes I've made and history of the results.
 
-##### Radix Sort
-
-![score_radix_sort](./assets/score_radix_sort.png)
-
 ##### Parallel Radix Sort
 
-Main thread sorts first byte of the key, and distribute workload of sorting rest of 9 bytes to other threads.![score_parallel_radix_sort](./assets/score_parallel_radix_sort.png)
+Main thread sorts first byte of the key, and distribute workload of sorting rest of 9 bytes to other threads.![score_radix_sort](./assets/score_radix_sort.png)
 
 ##### Last Tmp File Stays Inmemory
 
