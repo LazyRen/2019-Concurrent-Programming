@@ -4,7 +4,7 @@ int main(int argc, char* argv[])
 {
   ios::sync_with_stdio(false);
 
-  if (argc != 4) {
+  if (argc < 4) {
     cout << argv[0] << " requires 3 arguments" << endl;
     cout << "USAGE: ./" << argv[0] << " N R E" << endl;
     cout << "N: Number of worker threads" << endl;
@@ -16,6 +16,7 @@ int main(int argc, char* argv[])
   total_worker_threads = stoi(argv[1]);
   total_records        = stoi(argv[2]);
   max_execution_order  = stoi(argv[3]);
+  global_execution_order = 0;
 
   if (total_worker_threads <= 0) {
     cout << "ERROR: program must have positive number of threads\n";
@@ -44,6 +45,13 @@ int main(int argc, char* argv[])
 
   for (int i = 0; i < total_worker_threads; i++)
     threads[i].join();
+
+#ifdef VERBOSE
+  cout << "\n";
+  cout << "total_transaction_trial: " << total_transaction_trial << endl;
+  cout << "total_back_to_sleep: " << total_back_to_sleep << endl;
+  cout << "total_deadlock_found: " << total_deadlock_found << endl;
+#endif
 }
 
 int GetRandomNumber(int maxi)
@@ -85,11 +93,13 @@ vector<int> GetWaitingList(int tid, int rid)
   LockType l_type = thread_infos[tid].locks[rid]->lock_type;
   auto it = records[rid].lock_deque.rbegin();
   bool can_insert = true;
-  while (it->tid != tid)
-    it++;
   if (l_type == READER_LOCK)
     can_insert = false;
-  for (; it != records[rid].lock_deque.rend(); ++it) {
+
+  while (it->tid != tid)
+    it++;
+  it++;
+  for (; it != records[rid].lock_deque.rend(); it++) {
     if (!can_insert && it->lock_type == WRITER_LOCK)
       can_insert = true;
     if (can_insert)
@@ -136,7 +146,7 @@ bool DeadlockCheck(int tid)
 
 bool AcquireReadLock(int tid, int rid)
 {
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : trying to acquire " << rid << "'s READ lock\n";
 #endif
 
@@ -153,11 +163,14 @@ bool AcquireReadLock(int tid, int rid)
   }
 
   if (should_wait) {
-#ifdef VERBOSE
+#ifdef DEBUG
     cout << tid << " : waiting for " << rid << "'s READ lock\n";
 #endif
     if (DeadlockCheck(tid)) {
 #ifdef VERBOSE
+      total_deadlock_found++;
+#endif
+#ifdef DEBUG
       cout << tid << " : DEADLOCK found during READ LOCK on " << rid << endl;
 #endif
       for (auto it = records[rid].lock_deque.begin(); it != records[rid].lock_deque.end(); it++) {
@@ -169,11 +182,16 @@ bool AcquireReadLock(int tid, int rid)
       thread_infos[tid].locks.erase(rid);
       return false;
     }
-    while (!CanWakeUp(tid, rid, READER_LOCK))
+
+    while (!CanWakeUp(tid, rid, READER_LOCK)) {
+#ifdef VERBOSE
+      total_back_to_sleep++;
+#endif
       records[rid].cv.wait(global_mutex);
+    }
   }
 
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : acquired " << rid << "'s READ lock\n";
 #endif
   cur_obj.is_acquired = true;
@@ -183,7 +201,7 @@ bool AcquireReadLock(int tid, int rid)
 
 void ReleaseReadLock(int tid, int rid)
 {
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : releasing " << rid << "'s READ lock\n";
 #endif
 
@@ -202,7 +220,7 @@ void ReleaseReadLock(int tid, int rid)
 
 bool AcquireWriteLock(int tid, int rid)
 {
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : trying to acquire " << rid << "'s WRITE lock\n";
 #endif
 
@@ -211,11 +229,14 @@ bool AcquireWriteLock(int tid, int rid)
   thread_infos[tid].locks[rid] = &cur_obj;
 
   if (records[rid].lock_deque.size() != 1) {// wait to acquire the write lock
-#ifdef VERBOSE
+#ifdef DEBUG
     cout << tid << " : waiting for " << rid << "'s WRITE lock\n";
 #endif
     if (DeadlockCheck(tid)) {
 #ifdef VERBOSE
+      total_deadlock_found++;
+#endif
+#ifdef DEBUG
       cout << tid << " : DEADLOCK found during READ LOCK on " << rid << endl;
 #endif
       for (auto it = records[rid].lock_deque.begin(); it != records[rid].lock_deque.end(); it++) {
@@ -227,11 +248,16 @@ bool AcquireWriteLock(int tid, int rid)
       thread_infos[tid].locks.erase(rid);
       return false;
     }
-    while (!CanWakeUp(tid, rid, WRITER_LOCK))
+
+    while (!CanWakeUp(tid, rid, WRITER_LOCK)) {
+#ifdef VERBOSE
+      total_back_to_sleep++;
+#endif
       records[rid].cv.wait(global_mutex);
+    }
   }
 
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : acquired " << rid << "'s WRITE lock\n";
 #endif
   cur_obj.is_acquired = true;
@@ -241,7 +267,7 @@ bool AcquireWriteLock(int tid, int rid)
 
 void ReleaseWriteLock(int tid, int rid)
 {
-#ifdef VERBOSE
+#ifdef DEBUG
   cout << tid << " : releasing " << rid << "'s WRITE lock\n";
 #endif
 
@@ -269,6 +295,9 @@ void ThreadFunc(int tid)
   }
 
   while (commit_id <= max_execution_order) {
+#ifdef VERBOSE
+    total_transaction_trial++;
+#endif
     int i = GetRandomNumber(total_records);
     int j = GetRandomNumber(total_records);
     int k = GetRandomNumber(total_records);

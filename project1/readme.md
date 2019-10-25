@@ -36,7 +36,7 @@ Download gensort from the link, move `gensort` & `valsort` executable files to r
 
 |         Command          | Description                                                  |
 | :----------------------: | ------------------------------------------------------------ |
-| `./gensort SIZE OUTFILE` | create file named *OUTFILE* with size of *SIZE*. Below is the commands used to test<br>`gensort 10000000 input_1GB.data`<br>`gensort 20000000 input_2GB.data`<br>`gensort 40000000 input_4GB.data -s` (skewed keys) |
+| `./gensort SIZE OUTFILE` | create file named *OUTFILE* with size of *SIZE*. Below is the commands used for the test<br>`gensort 10000000 input_1GB.data`<br>`gensort 20000000 input_2GB.data`<br>`gensort 40000000 input_4GB.data -s` (skewed keys) |
 |   `./valsort OUTFILE`    | Check if keys are well sorted in *OUTFILE*.<br>Assume you ran command `./run input_1GB.data output_1GB.test`<br>Use `./valsort output_1GB.test` for check correctness. |
 
 ## 

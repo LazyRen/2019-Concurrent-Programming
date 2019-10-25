@@ -1,6 +1,10 @@
 #ifndef _RWLOCK_H_
 #define _RWLOCK_H_
 
+#ifdef VERBOSE
+#include <atomic>
+#endif
+
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
@@ -49,13 +53,16 @@ public:
 };
 
 class ThreadInfo {
-  public:
+public:
   int tid;
   unordered_map<int, Lock*> locks;
   ThreadInfo(int tid) : tid(tid) {}
 };
 
-int total_worker_threads, total_records, max_execution_order, global_execution_order = 0;
+int total_worker_threads, total_records, max_execution_order, global_execution_order;
+#ifdef VERBOSE
+atomic<int64_t> total_transaction_trial, total_back_to_sleep, total_deadlock_found;
+#endif
 mutex global_mutex;
 Record* records;
 vector<thread> threads;

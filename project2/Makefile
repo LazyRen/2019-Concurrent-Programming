@@ -7,14 +7,18 @@ INCS := $(wildcard include/*.h)
 INC = ./include/
 
 TARGET = run
+VALIDATE = validation
 override CFLAGS += -Wall -g -O2 -std=c++14 -I$(INC) -lpthread
 
-all: $(TARGET)
+all: $(TARGET) $(VALIDATE)
 
 $(TARGET): $(SRCS) $(INCS)
-	$(CC) -o $(TARGET) $(SRCS) $(CFLAGS)
+	$(CC) -o $@ $(SRCS) $(CFLAGS)
+
+$(VALIDATE): $(VALIDATE).cpp
+	$(CC) -o $@ $^ $(CFLAGS)
 
 # Delete binary & object files
 clean:
-	$(RM) $(TARGET) $(OBJS)
+	$(RM) $(TARGET) $(VALIDATE)
 	$(RM) thread*.txt
