@@ -1,4 +1,4 @@
-# Parallel External Sort
+# Multi-thread Database
 
 [![GitHub issue author](https://img.shields.io/badge/author-Dae%20In%20Lee-blue.svg)](https://github.com/LazyRen)
 
