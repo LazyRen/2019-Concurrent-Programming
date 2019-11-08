@@ -19,7 +19,7 @@ int main(int argc, char* argv[])
   global_execution_order = 0;
 
   if (total_worker_threads <= 0) {
-    cout << "ERROR: program must have positive number of threads\n";
+    cout << "ERROR: program must have positive number of thread\n";
     exit(0);
   }
   if (total_records < 3) {
