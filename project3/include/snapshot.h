@@ -46,7 +46,7 @@ public:
 
   void AddGarbage(ll epoch, T* snapshot)
   {
-    GCObject<T> *garbage = new GCObject(epoch, snapshot);
+    GCObject<T> *garbage = new GCObject<T> (epoch, snapshot);
     garbage->next = garbage_list.load();
 
     while (true) {
