@@ -38,3 +38,9 @@ test:
 	./run 32
 	./run 32
 	./run 32
+	./run 64
+	./run 64
+	./run 64
+	./run 128
+	./run 128
+	./run 128
