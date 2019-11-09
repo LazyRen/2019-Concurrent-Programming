@@ -270,7 +270,7 @@ public:
 };
 ```
 
-Since all worker thread can add to the linked list waiting list, it uses *CAS* operation to make it concurrent data structure.<br>Only one GC thread will do checking & deallocating the GCObject.<br>Main thread will keep increament global variable `g_epoch_counter`, and for every 100000 ticks, GC thread will run `SalvageGarbage()`. If object within the list has the epoch # that is lower than any of thread's epoch #, it means no threads are using that object(snapshot). Meaning the object is safe to deallocate.
+Since all worker thread can add to the waiting list, it uses *CAS* operation to make it *concurrent linked list*.<br>Only one GC thread will do checking & deallocating the GCObject.<br>Main thread will keep increament global variable `g_epoch_counter`, and for every 100000 ticks, GC thread will run `SalvageGarbage()`. If object within the list has the epoch # that is lower than any of thread's epoch #, it means no threads are using that object(snapshot). Meaning the object is safe to deallocate.
 
 
 
@@ -278,9 +278,23 @@ Since all worker thread can add to the linked list waiting list, it uses *CAS* o
 
 As I've mentioned earlier, simply swaping snapshot within `StampedData` while updating will cause memory leak. Because no one can safely deallocate previously stored snapshot. It cannot be deallocated while updating, because there is a change of other thread using that snapshot due to *borrowing mechanism* implemented in `scan()`.<br>Just like Java, (which language will handle the garbage collection by reference counting) `shared_ptr` can be used to count reference, but it is not safe to use in parallel programming.<br>So instead of using future C++20 atomic_shared_ptr, I chose to create my own **Epoch Based Garbage Collector**(Thank you Bw-Tree!). The problem is that program cannot deallocate snapshot because it may be used by others.<br>So why not delay the deallocation to wait other threads to finish using it?!<br>![Add Garbage](./assets/addgarbage.png)When snapshot is loaded to garbage list, it gets the epoch value synced to global epoch<br>Each thread will hold it's own epoch value which is synced to global epoch during the update.<br>![Salvage Garbage](./assets/salvagegarbage.png)So if all threads have higher epoch value than garbage object, all threads are using newly created snapshot. Therefore no one is using the garbaged snapshot. So GC thread will deallocate it.<br>
 
-
+Garbage Collector thread will perform salvaging continuously with 0.1 sec delay.
 
 ## Test Results
 
+###### Tested Environment
 
+Virtual Machine<br>CPU: i7-6700 4 cores 3.40 GHz<br>RAM: 8 GB<br>OS: Linux 18.04<br>GCC: c++17
+
+![test_terminal](./assets/test_terminal.png)
+
+I ran tests with 1 ~ 128 worker thread. Each test result is average of 3 tests.
+
+![test_chart.png](./assets/test_chart.png)
+
+
+
+### Result Analyze
+
+As expected, total upgrade count is increasing until 8, witch is max-thread number CPU can physically run simultaneously(with hyper-threading). After that, count decreases as more worker thread gets to work.<br>As the number of the worker thread grows, execution of `scan()` in `WFSnapshot` is most likely to fail getting a clean snapshot. So it will borrow snapshot from other thread's `update()` after looping for a while (until it finds same thread has updated twice).
 
