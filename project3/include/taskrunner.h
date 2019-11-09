@@ -12,19 +12,18 @@ template <typename T>
 class TaskRunner {
 private:
   vector<thread> thread_pool;
-  WFSnapshot<T> *snapshot;
+  WFSnapshot<T> snapshot;
   bool is_time_exceeded;
   int *update_counter;
   int execution_time;
 
 public:
   TaskRunner(int thread_num, int time)
-    : thread_pool(thread_num), snapshot(new WFSnapshot<T>(thread_num)),
+    : thread_pool(thread_num), snapshot(thread_num),
       is_time_exceeded(false), update_counter(new int[thread_num]), execution_time(time) {};
 
   ~TaskRunner()
   {
-    delete snapshot;
     delete[] update_counter;
   }
 
@@ -47,11 +46,33 @@ public:
     for (int i = 0; i < thread_pool.size(); i++)
       thread_pool[i] = thread(&TaskRunner::SpinUpdate, this, i);
 
-    this_thread::sleep_for(chrono::seconds(execution_time));
+    // this_thread::sleep_for(chrono::seconds(execution_time));
+    auto start_time = chrono::high_resolution_clock::now();
+    auto stop_time  = chrono::high_resolution_clock::now();
+    auto duration   = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
+    long long salvage_cnt = 0;
+    while (duration.count() < (execution_time * 1000.0)) {
+      g_epoch_counter++;
+
+      if (g_epoch_counter % 100000 == 0) {
+        snapshot.garbage_collector.SalvageGarbage();
+        salvage_cnt++;
+      }
+
+      stop_time = chrono::high_resolution_clock::now();
+      duration  = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
+    }
     is_time_exceeded = true;
 
     for (int i = 0; i < thread_pool.size(); i++)
       thread_pool[i].join();
+
+    snapshot.garbage_collector.SalvageGarbage(true);
+#ifdef VERBOSE
+    cout << "g_epoch_counter: " << g_epoch_counter << endl;
+    cout << "Salve Function Call : " << salvage_cnt + 1 << endl;
+    cout << "Total " << snapshot.garbage_collector.salvaged << " objects has been salvaged" << endl;
+#endif
 
     int total_updates = 0;
     for (int i = 0; i < thread_pool.size(); i++)
@@ -66,7 +87,7 @@ public:
 
     while (!is_time_exceeded) {
       T new_val = GetRandomNumber();
-      snapshot->update(new_val, tid);
+      snapshot.update(new_val, tid);
       update_cnt++;
     }
 

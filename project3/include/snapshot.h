@@ -1,11 +1,94 @@
 #ifndef _SNAPSHOT_H_
 #define _SNAPSHOT_H_
 
+#include <algorithm>
+#include <atomic>
 #include <memory>
 #include <vector>
 using namespace std;
 
 typedef long long int ll;
+
+ll g_epoch_counter;
+
+template <typename T>
+class GCObject {
+private:
+  ll epoch;
+  T *snapshot;
+
+public:
+  GCObject<T> *next;
+
+  GCObject(ll _epoch = 0, T* _snapshot = nullptr)
+    : epoch(_epoch), snapshot(_snapshot), next(nullptr) {}
+
+  ~GCObject()
+  {
+    delete[] snapshot;
+  }
+
+  ll GetEpoch() const
+  {
+    return epoch;
+  }
+};
+
+template <typename T>
+class GarbageCollector {
+public:
+  vector<ll> thread_epoch;
+  ll salvaged;
+  atomic<GCObject<T>*> garbage_list;
+
+  GarbageCollector(int thread_num)
+    : thread_epoch(thread_num), salvaged(0), garbage_list(nullptr) {}
+
+  void AddGarbage(ll epoch, T* snapshot)
+  {
+    GCObject<T> *garbage = new GCObject(epoch, snapshot);
+    garbage->next = garbage_list.load();
+
+    while (true) {
+      bool ret = garbage_list.compare_exchange_strong(garbage->next, garbage);
+
+      if (ret)
+        break;
+    }
+  }
+
+  void SalvageGarbage(bool force_salvage = false)
+  {
+    GCObject<T> *prev = garbage_list.load(), *cur, *next;
+
+    if (force_salvage) {
+      cur = prev;
+      while (cur) {
+        next = cur->next;
+        delete cur;
+        cur = next;
+        salvaged++;
+      }
+      return;
+    }
+
+    if(prev)
+      cur = prev->next;
+    else
+      cur = nullptr;
+    while (cur) {
+      next = cur->next;
+      if (cur->GetEpoch() < *min_element(thread_epoch.begin(), thread_epoch.end())) {
+        prev->next = next;
+        delete cur;
+        salvaged++;
+      } else {
+        prev = cur;
+      }
+      cur = next;
+    }
+  }
+};
 
 template <typename T>
 class StampedData {
@@ -19,11 +102,18 @@ public:
     : value(_value), snapshot(_snap), stamp(_stamp) {}
 
   StampedData(const StampedData& other)
-    : value(other.value), snapshot(nullptr), stamp(0) {}
+    : value(other.value), snapshot(other.snapshot), stamp(other.stamp) {}
 
   T Read() const
   {
     return value;
+  }
+
+  void update(T _value, T* _snap, ll _stamp)
+  {
+    snapshot = _snap;
+    stamp    = _stamp;
+    value    = _value;
   }
 
   T* GetSnapshot() const
@@ -42,50 +132,59 @@ class WFSnapshot {
 private:
   vector<StampedData<T>> registers;
 
-  StampedData<T>* collect()
+  void collect(vector<StampedData<T>> &snapshot)
   {
-    StampedData<T> *copy = new StampedData<T>[registers.size()];
-
     for (int i = 0; i < registers.size(); i++)
-      copy[i] = registers[i];
-
-    return copy;
+      snapshot[i] = registers[i];
   }
 
 public:
-  WFSnapshot(int n)
-    : registers(n) {}
+  GarbageCollector<T> garbage_collector;
+
+  WFSnapshot(int size)
+    : registers(size), garbage_collector(size) {}
 
   void update(T value, int tid)
   {
-    T *prev_snapshot = scan();
+    bool stolen_snapshot = false;// set to true iff taken snapshot from scan() is from other thread's update.
+    T *taken_snapshot = scan(stolen_snapshot);
+    if (stolen_snapshot)
+      taken_snapshot[registers.size()] = -1;
+    else
+      taken_snapshot[registers.size()] = tid;
 
-    StampedData<T> old_value = registers[tid];
-    registers[tid] = StampedData<T>(value, old_value.GetStamp() + 1, prev_snapshot);
+    StampedData<T> old_reg = registers[tid];
+
+    garbage_collector.thread_epoch[tid] = g_epoch_counter;
+    // if (!stolen_snapshot)
+    if (old_reg.GetSnapshot() && old_reg.GetSnapshot()[registers.size()] == tid)
+      garbage_collector.AddGarbage(garbage_collector.thread_epoch[tid], old_reg.GetSnapshot());
+
+    registers[tid].update(value, taken_snapshot, old_reg.GetStamp() + 1);
   }
 
-  T* scan()
+  T* scan(bool &stolen_snapshot)
   {
-    StampedData<T> *old_snapshot;
-    StampedData<T> *new_snapshot;
+    vector<StampedData<T>> old_snapshot (registers.size());
+    vector<StampedData<T>> new_snapshot (registers.size());
     vector<bool> is_modified(registers.size(), false);
 
-    old_snapshot = collect();
+    collect(old_snapshot);
 
     while (true) {
       bool is_equal = true;
-      new_snapshot = collect();
+      collect(new_snapshot);
 
       for (int i = 0; i < registers.size(); i++) {
         if (old_snapshot[i].GetStamp() != new_snapshot[i].GetStamp()) {
-            if (is_modified[i]) {
-              return old_snapshot[i].GetSnapshot();
-            } else {
-              is_equal = false;
-              is_modified[i] = true;
-              delete old_snapshot;
-              old_snapshot = new_snapshot;
-              break;
+          if (is_modified[i]) {
+            stolen_snapshot = true;
+            return old_snapshot[i].GetSnapshot();
+          } else {
+            is_equal = false;
+            is_modified[i] = true;
+            old_snapshot = new_snapshot;
+            break;
           }
         }
       }
@@ -94,12 +193,9 @@ public:
         break;
     }
 
-    T *result = new T[registers.size()];
-
+    T *result = new T[registers.size() + 1];
     for (int i = 0; i < registers.size(); i++)
       result[i] = new_snapshot[i].Read();
-
-    // delete new_snapshot;
 
     return result;
   }
