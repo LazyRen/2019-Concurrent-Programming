@@ -44,9 +44,8 @@ public:
   int Run()
   {
     for (int i = 0; i < thread_pool.size(); i++)
-      thread_pool[i] = thread(&TaskRunner::SpinUpdate, this, i);
+      thread_pool[i] = thread (&TaskRunner::SpinUpdate, this, i);
 
-    // this_thread::sleep_for(chrono::seconds(execution_time));
     auto start_time = chrono::high_resolution_clock::now();
     auto stop_time  = chrono::high_resolution_clock::now();
     auto duration   = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
@@ -55,7 +54,7 @@ public:
       g_epoch_counter++;
 
       if (g_epoch_counter % 100000 == 0) {
-        snapshot.garbage_collector.SalvageGarbage();
+        thread ( [this] {snapshot.garbage_collector.SalvageGarbage();} ).detach();
         salvage_cnt++;
       }
 
@@ -68,6 +67,7 @@ public:
       thread_pool[i].join();
 
     snapshot.garbage_collector.SalvageGarbage(true);
+
 #ifdef VERBOSE
     cout << "g_epoch_counter: " << g_epoch_counter << endl;
     cout << "Salve Function Call : " << salvage_cnt + 1 << endl;

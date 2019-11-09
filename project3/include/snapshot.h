@@ -72,7 +72,7 @@ public:
       return;
     }
 
-    if(prev)
+    if (prev)
       cur = prev->next;
     else
       cur = nullptr;
@@ -156,7 +156,7 @@ public:
     StampedData<T> old_reg = registers[tid];
 
     garbage_collector.thread_epoch[tid] = g_epoch_counter;
-    // if (!stolen_snapshot)
+
     if (old_reg.GetSnapshot() && old_reg.GetSnapshot()[registers.size()] == tid)
       garbage_collector.AddGarbage(garbage_collector.thread_epoch[tid], old_reg.GetSnapshot());
 

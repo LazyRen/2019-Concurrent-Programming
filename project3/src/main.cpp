@@ -5,8 +5,6 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-  ios::sync_with_stdio(false);
-
   if (argc < 2) {
     cout << argv[0] << " requires 1 argument" << endl;
     cout << "USAGE: ./" << argv[0] << " N" << endl;
