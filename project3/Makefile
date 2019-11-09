@@ -17,3 +17,24 @@ $(TARGET): $(SRCS) $(INCS)
 # Delete binary & object files
 clean:
 	$(RM) $(TARGET) $(VALIDATE)
+
+test:
+	make all
+	./run 1
+	./run 1
+	./run 1
+	./run 2
+	./run 2
+	./run 2
+	./run 4
+	./run 4
+	./run 4
+	./run 8
+	./run 8
+	./run 8
+	./run 16
+	./run 16
+	./run 16
+	./run 32
+	./run 32
+	./run 32
