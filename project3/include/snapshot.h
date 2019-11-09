@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <vector>
 using namespace std;
@@ -40,9 +41,10 @@ public:
   vector<ll> thread_epoch;
   ll salvaged;
   atomic<GCObject<T>*> garbage_list;
+  bool is_time_exceeded;
 
   GarbageCollector(int thread_num)
-    : thread_epoch(thread_num), salvaged(0), garbage_list(nullptr) {}
+    : thread_epoch(thread_num), salvaged(0), garbage_list(nullptr), is_time_exceeded(false) {}
 
   void AddGarbage(ll epoch, T* snapshot)
   {
@@ -59,34 +61,36 @@ public:
 
   void SalvageGarbage(bool force_salvage = false)
   {
-    GCObject<T> *prev = garbage_list.load(), *cur, *next;
-
-    if (force_salvage) {
-      cur = prev;
+    GCObject<T> *prev, *cur, *next;
+    while (!is_time_exceeded) {
+      prev = garbage_list.load();
+      if (prev) {
+        cur = prev->next;
+      } else {
+        continue;
+      }
       while (cur) {
         next = cur->next;
-        delete cur;
+        if (cur->GetEpoch() < *min_element(thread_epoch.begin(), thread_epoch.end())) {
+          prev->next = next;
+          delete cur;
+          salvaged++;
+        } else {
+          prev = cur;
+        }
         cur = next;
-        salvaged++;
       }
-      return;
+      this_thread::sleep_for(chrono::milliseconds(100));
     }
 
-    if (prev)
-      cur = prev->next;
-    else
-      cur = nullptr;
+    cur = garbage_list.load();
     while (cur) {
       next = cur->next;
-      if (cur->GetEpoch() < *min_element(thread_epoch.begin(), thread_epoch.end())) {
-        prev->next = next;
-        delete cur;
-        salvaged++;
-      } else {
-        prev = cur;
-      }
+      delete cur;
       cur = next;
+      salvaged++;
     }
+    return;
   }
 };
 

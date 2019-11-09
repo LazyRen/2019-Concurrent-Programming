@@ -1,7 +1,6 @@
 #ifndef _TASKRUNNER_H_
 #define _TASKRUNNER_H_
 
-#include <chrono>
 #include <climits>
 #include <random>
 #include <thread>
@@ -45,6 +44,7 @@ public:
   {
     for (int i = 0; i < thread_pool.size(); i++)
       thread_pool[i] = thread (&TaskRunner::SpinUpdate, this, i);
+    thread gc_thread = thread ( [this] {snapshot.garbage_collector.SalvageGarbage();} );
 
     auto start_time = chrono::high_resolution_clock::now();
     auto stop_time  = chrono::high_resolution_clock::now();
@@ -53,20 +53,14 @@ public:
     while (duration.count() < (execution_time * 1000.0)) {
       g_epoch_counter++;
 
-      if (g_epoch_counter % 100000 == 0) {
-        thread ( [this] {snapshot.garbage_collector.SalvageGarbage();} ).detach();
-        salvage_cnt++;
-      }
-
       stop_time = chrono::high_resolution_clock::now();
       duration  = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
     }
-    is_time_exceeded = true;
+    is_time_exceeded = snapshot.garbage_collector.is_time_exceeded = true;
 
     for (int i = 0; i < thread_pool.size(); i++)
       thread_pool[i].join();
-
-    snapshot.garbage_collector.SalvageGarbage(true);
+    gc_thread.join();
 
 #ifdef VERBOSE
     cout << "g_epoch_counter: " << g_epoch_counter << endl;
