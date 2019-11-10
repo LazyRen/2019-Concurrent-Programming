@@ -8,8 +8,8 @@
 * [Implementation](#implementation)
   * [Tasks](#tasks)
   * [Classes](#classes)
-    * [Wait Free Snapshot](#wait-free-snapshot)
-    * [Epoch Based Garbage Collection](#-epoch-based-garbage-collection)
+      * [Wait Free Snapshot](#wait-free-snapshot)
+      * [Epoch Based Garbage Collection](#epoch-based-garbage-collection)
   * [Preventing Memory Leak](#preventing-memory-leak)
 * [Test Results](#test-results)
 
@@ -22,11 +22,11 @@ You must run either `make` or `make CFLAGS+=-DVERBOSE` once before executing `ru
 |         Command          | Description                                                |
 | :----------------------: | ---------------------------------------------------------- |
 |          `make`          | Create excutable file named 'run' on root folder           |
-| `make CFLAGS+=-DVERBOSE` | Program will tell more about transactions.                 |
+| `make CFLAGS+=-DVERBOSE` | Program will give more information.                        |
 |       `make clean`       | Remove all executable & thread*.txt files from the folder. |
-|        `./run N`         | Program will spin update with `N`  threads for 60 seconds  |
+|        `./run N`         | Program will spin update with `N` threads for 60 seconds   |
 
-**NOTE** *N* will be considered as a positive  `int`. Program does not guarantee execution of overflowed *N*.<br>If you wish to run program with diffrent duration(default: 60 seconds), change `TaskRunner`'s second argument.
+**NOTE** *N* will be considered as a positive `int`. Program does not guarantee execution of overflowed *N*.<br>If you wish to run program with diffrent duration(default: 60 seconds), change `TaskRunner`'s second argument.
 
 ## Implementation
 
@@ -42,7 +42,7 @@ You must run either `make` or `make CFLAGS+=-DVERBOSE` once before executing `ru
 
 #### Wait Free Snapshot
 
-The implementation of **Wait-free Snapshot** structure is based on the text book `The Art of Multiprocessor Programming` ch.4-3.<br>There has been a slight modification to it in order to port skeleton code into **C++**. Such modification includes way to deal with possible memory leak / order of update within `StampedData` structure (concurrency).
+The implementation of **Wait-free Snapshot** structure is based on the textbook `The Art of Multiprocessor Programming` ch.4-3.<br>There has been a slight modification to it in order to port skeleton java code into *C++*. Such modification includes way to deal with possible memory leak / order of update within `StampedData` structure (concurrency).
 
 
 
@@ -113,7 +113,8 @@ public:
 
   void update(T value, int tid)
   {
-    bool stolen_snapshot = false;// set to true iff taken snapshot from scan() is from other thread's update.
+    // set to true iff taken snapshot from scan() is from other thread's update.
+    bool stolen_snapshot = false;
     T *taken_snapshot = scan(stolen_snapshot);
     if (stolen_snapshot)
       taken_snapshot[registers.size()] = -1;
@@ -169,11 +170,11 @@ public:
 };
 ```
 
-The detail of concurrency validation is posted on textbook, so I will only cover what has been added.<br>Dynamic memory allocation is minimized as much as possible. Only memory allocation happens within `scan()` when it succeeded capturing safe snapshot. It may *borrow* the snapshot from other thread's `update()` wich makes this structure *wait-free*.<br>
+The detail of concurrency validation is posted on textbook, so I will only cover what has been added.<br>Dynamic memory allocation is minimized as much as possible. Only memory allocation happens within `scan()` when it succeeded capturing clean snapshot. It may *borrow* the snapshot from other thread's `update()` wich makes this structure *wait-free*.<br>
 
 ###### Adding Garbage Object
 
-During the `update()`, thread must change snapshot within `StampedData`. If no other actions are taken, the previous snapshot will never be freed, thus cause memory leak.<br>In this implementation, right before changing the snapshot of `StampedData`, thread adds previous snapshot into garbage collector's waiting list with current global epoch. (**IFF** previous snapshot was created by itself; Allocator also responsible to deallocation)<br>Those snapshots in waiting list will be freed when it is safe to do so. (no threads are using it)
+During the `update()`, thread must change snapshot within `StampedData`. If no other actions are taken, the previous snapshot will never be freed, thus cause memory leak.<br>In this implementation, right before changing the snapshot of `StampedData`, thread adds previous snapshot into garbage collector's waiting list with current global epoch. (**IFF** previous snapshot was created by itself; Allocator takes responsible of deallocation. If previous snapshot was *borrowed*, don't add it to the garbage list. Because creater thread of that snapshot will eventually do so.)<br>Those snapshots in waiting list will be freed when it is [safe to do so](#preventing-memory-leak).
 
 
 
@@ -219,9 +220,10 @@ public:
   vector<ll> thread_epoch;
   ll salvaged;
   atomic<GCObject<T>*> garbage_list;
+  bool is_time_exceeded;
 
   GarbageCollector(int thread_num)
-    : thread_epoch(thread_num), salvaged(0), garbage_list(nullptr) {}
+    : thread_epoch(thread_num), salvaged(0), garbage_list(nullptr), is_time_exceeded(false) {}
 
   void AddGarbage(ll epoch, T* snapshot)
   {
@@ -238,45 +240,51 @@ public:
 
   void SalvageGarbage(bool force_salvage = false)
   {
-    GCObject<T> *prev = garbage_list.load(), *cur, *next;
-
-    if (force_salvage) {
-      cur = prev;
+    GCObject<T> *prev, *cur, *next;
+    while (!is_time_exceeded) {
+      prev = garbage_list.load();
+      if (prev) {
+        cur = prev->next;
+      } else {
+        continue;
+      }
       while (cur) {
         next = cur->next;
-        delete cur;
+        if (cur->GetEpoch() < *min_element(thread_epoch.begin(), thread_epoch.end())) {
+          prev->next = next;
+          delete cur;
+          salvaged++;
+        } else {
+          prev = cur;
+        }
         cur = next;
-        salvaged++;
       }
-      return;
+      this_thread::sleep_for(chrono::milliseconds(100));
     }
 
-    if(prev)
-      cur = prev->next;
-    else
-      cur = nullptr;
+    cur = garbage_list.load();
     while (cur) {
       next = cur->next;
-      if (cur->GetEpoch() < *min_element(thread_epoch.begin(), thread_epoch.end())) {
-        prev->next = next;
-        delete cur;
-        salvaged++;
-      } else {
-        prev = cur;
-      }
+      delete cur;
       cur = next;
+      salvaged++;
     }
+    return;
   }
 };
 ```
 
-Since all worker thread can add to the waiting list, it uses *CAS* operation to make it *concurrent linked list*.<br>Only one GC thread will do checking & deallocating the GCObject.<br>Main thread will keep increament global variable `g_epoch_counter`, and for every 100000 ticks, GC thread will run `SalvageGarbage()`. If object within the list has the epoch # that is lower than any of thread's epoch #, it means no threads are using that object(snapshot). Meaning the object is safe to deallocate.
+Since all worker thread can add to the waiting list, it uses *CAS* operation to make it *concurrent linked list*.<br>Only one GC thread will do checking & deallocating the GCObject(`SalvageGarbage()`).<br>If object within the list has the epoch # that is lower than any of thread's epoch #, it means no threads are using that object(snapshot). Meaning the object is safe to deallocate.
 
 
 
 ### Preventing Memory Leak
 
-As I've mentioned earlier, simply swaping snapshot within `StampedData` while updating will cause memory leak. Because no one can safely deallocate previously stored snapshot. It cannot be deallocated while updating, because there is a change of other thread using that snapshot due to *borrowing mechanism* implemented in `scan()`.<br>Just like Java, (which language will handle the garbage collection by reference counting) `shared_ptr` can be used to count reference, but it is not safe to use in parallel programming.<br>So instead of using future C++20 atomic_shared_ptr, I chose to create my own **Epoch Based Garbage Collector**(Thank you Bw-Tree!). The problem is that program cannot deallocate snapshot because it may be used by others.<br>So why not delay the deallocation to wait other threads to finish using it?!<br>![Add Garbage](./assets/addgarbage.png)When snapshot is loaded to garbage list, it gets the epoch value synced to global epoch<br>Each thread will hold it's own epoch value which is synced to global epoch during the update.<br>![Salvage Garbage](./assets/salvagegarbage.png)So if all threads have higher epoch value than garbage object, all threads are using newly created snapshot. Therefore no one is using the garbaged snapshot. So GC thread will deallocate it.<br>
+As I've mentioned earlier, simply swaping snapshot within `StampedData` while updating will cause memory leak. Because no one can safely deallocate previously stored snapshot. It cannot be deallocated while updating, because there is a change of other threads using that snapshot due to *borrowing mechanism* implemented in `scan()`.<br>Just like Java, (which language will handle the garbage collection by reference counting) `shared_ptr` can be used to count reference, but it is not safe to use in parallel programming.<br>So instead of using future C++20 atomic_shared_ptr, I chose to create my own **Epoch Based Garbage Collector**(Thank you Bw-Tree!). The problem is that program cannot deallocate snapshot because it may be used by others.<br>So why not delay the deallocation to wait other threads to finish using it?!<br>
+![Add Garbage](./assets/addgarbage.png)
+When snapshot is loaded to garbage list, it gets the epoch value synced to global epoch<br>Each thread will hold it's own epoch value which is synced to global epoch during the update.<br>
+![Salvage Garbage](./assets/salvagegarbage.png)
+So if all threads have higher epoch value than garbage object, all threads are using newly created snapshot. Therefore no one is using the garbaged snapshot. So GC thread will deallocate it.<br>
 
 Garbage Collector thread will perform salvaging continuously with 0.1 sec delay.
 

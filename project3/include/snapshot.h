@@ -150,7 +150,8 @@ public:
 
   void update(T value, int tid)
   {
-    bool stolen_snapshot = false;// set to true iff taken snapshot from scan() is from other thread's update.
+    // set to true iff taken snapshot from scan() is from other thread's update.
+    bool stolen_snapshot = false;
     T *taken_snapshot = scan(stolen_snapshot);
     if (stolen_snapshot)
       taken_snapshot[registers.size()] = -1;
