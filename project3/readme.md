@@ -297,4 +297,3 @@ I ran tests with 1 ~ 128 worker thread. Each test result is average of 3 tests.
 ### Result Analyze
 
 As expected, total upgrade count is increasing until 8, witch is max-thread number CPU can physically run simultaneously(with hyper-threading). After that, count decreases as more worker thread gets to work.<br>As the number of the worker thread grows, execution of `scan()` in `WFSnapshot` is most likely to fail getting a clean snapshot. So it will borrow snapshot from other thread's `update()` after looping for a while (until it finds same thread has updated twice).
-
