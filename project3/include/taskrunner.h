@@ -51,7 +51,7 @@ public:
     auto duration   = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
     long long salvage_cnt = 0;
     while (duration.count() < (execution_time * 1000.0)) {
-      g_epoch_counter++;
+      snapshot.garbage_collector.global_epoch_counter++;
 
       stop_time = chrono::high_resolution_clock::now();
       duration  = chrono::duration_cast<chrono::milliseconds>(stop_time - start_time);
@@ -63,7 +63,7 @@ public:
     gc_thread.join();
 
 #ifdef VERBOSE
-    cout << "g_epoch_counter: " << g_epoch_counter << endl;
+    cout << "global_epoch_counter: " << snapshot.garbage_collector.global_epoch_counter << endl;
     cout << "Salve Function Call : " << salvage_cnt + 1 << endl;
     cout << "Total " << snapshot.garbage_collector.salvaged << " objects has been salvaged" << endl;
 #endif

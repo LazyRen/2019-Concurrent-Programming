@@ -123,7 +123,7 @@ public:
 
     StampedData<T> old_reg = registers[tid];
 
-    garbage_collector.thread_epoch[tid] = g_epoch_counter;
+    garbage_collector.thread_epoch[tid] = garbage_collector.global_epoch_counter;
 
     if (old_reg.GetSnapshot() && old_reg.GetSnapshot()[registers.size()] == tid)
       garbage_collector.AddGarbage(garbage_collector.thread_epoch[tid], old_reg.GetSnapshot());
@@ -217,6 +217,7 @@ Simple container of dynamic allocated snapshot.
 template <typename T>
 class GarbageCollector {
 public:
+  ll global_epoch_counter;
   vector<ll> thread_epoch;
   ll salvaged;
   atomic<GCObject<T>*> garbage_list;
