@@ -1,6 +1,7 @@
 # Ignore all without extensions(Binary Files)
 *
 !*.*
+!patchfile
 # Unignore all dirs
 !*/
 !Makefile
