@@ -1,66 +1,77 @@
-#include <cstdio>
+//
+// Created by 안재찬 on 2019/11/20.
+//
+
+#include <stdio.h>
 #include <pthread.h>
 
-#define NUM_THREAD    16
-#define NUM_WORK      1000000
+#define NUM_THREAD 16
+#define NUM_WORK 1000000
 
 int cnt_global;
-/* to allocate cnt_global & clh_object in different cache lines */
-int gap[128];
-bool *clh_object;
 
-bool clh_init(bool* clh_object);
-void lock(bool* lock_object);
-void unlock(bool* lock_object);
-void* thread_work(void* args);
+class QNode {
+public:
+  bool locked;
 
-int main()
-{
-  pthread_t threads[NUM_THREAD];
+  explicit QNode(bool _locked) : locked(_locked) {
+  }
+};
 
-  clh_init(clh_object);
+// Global tail
+QNode *tail;
 
-  /*
-  for (int i = 0; i < NUM_THREAD; i++)
-    pthread_create(&threads[i], NULL, thread_work, NULL);
+class Lock {
+public:
+  virtual void lock() = 0;
+  virtual void unlock() = 0;
+};
 
-  for (int i = 0; i < NUM_THREAD; i++)
-    pthread_join(threads[i], NULL);
+class CLHLock : public Lock {
+public:
+  QNode *my_node;
+  QNode *pred_node;
 
-  printf("cnt_global: %d\n", cnt_global);
-  */
-  return 0;
-}
+public:
+  void lock() override {
+    my_node = new QNode(true);
+    pred_node = __sync_lock_test_and_set(&tail, my_node);
 
-bool clh_init(bool* clh_object)
-{
-  if (clh_object != NULL)
-    return false;
+    while (pred_node->locked)
+      pthread_yield();
 
-  clh_object = new bool;
-  *clh_object = false;
-
-  return true;
-}
-
-void lock(bool** lock_object)
-{
-  while (__sync_lock_test_and_set(lock_object, 1) == 1) {}
-}
-
-void unlock(bool** lock_object)
-{
-  __sync_synchronize();
-  *lock_object = 0;
-}
-
-void* thread_work(void* args)
-{
-  for (int i = 0; i < NUM_WORK; i++) {
-    lock(&clh_object);
-    cnt_global++;
-    unlock(&clh_object);
+    delete pred_node;
   }
 
-  return NULL;
+  void unlock() override {
+    my_node->locked = false;
+  }
+};
+
+void *thread_work(void *args) {
+  CLHLock lk;
+  for (int i = 0; i < NUM_WORK; i++) {
+    lk.lock();
+    cnt_global++;
+    lk.unlock();
+  }
+}
+
+int main() {
+  tail = new QNode(false);
+
+  pthread_t threads[NUM_THREAD];
+
+  for (int i = 0; i < NUM_THREAD; i++) {
+    pthread_create(&threads[i], NULL, thread_work, NULL);
+  }
+  for (int i = 0; i < NUM_THREAD; i++) {
+    pthread_join(threads[i], NULL);
+  }
+
+  printf("cnt_global: %d\n", cnt_global);
+
+  delete tail;
+
+  return 0;
 }
