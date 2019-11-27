@@ -71,25 +71,23 @@ bool list_add(int key) {
     pthread_mutex_lock(&curr->mutex);
 
     if (!list_validate(prev, curr)) {
-      pthread_mutex_unlock(&curr->mutex);
       pthread_mutex_unlock(&prev->mutex);
+      pthread_mutex_unlock(&curr->mutex);
     } else {
       if (curr->key == key) {
-        pthread_mutex_unlock(&curr->mutex);
         pthread_mutex_unlock(&prev->mutex);
+        pthread_mutex_unlock(&curr->mutex);
         free(node);
         return false;
       }
       prev->next = node;
       node->next = curr;
 
-      pthread_mutex_unlock(&curr->mutex);
       pthread_mutex_unlock(&prev->mutex);
-      break;
+      pthread_mutex_unlock(&curr->mutex);
+      return true;
     }
   }
-
-  return true;
 }
 
 // remove key from the list
@@ -110,17 +108,17 @@ bool list_remove(int key) {
     pthread_mutex_lock(&curr->mutex);
 
     if (!list_validate(prev, curr)) {
-      pthread_mutex_unlock(&curr->mutex);
       pthread_mutex_unlock(&prev->mutex);
+      pthread_mutex_unlock(&curr->mutex);
     } else {
-      if (curr->key == key) {
-        pthread_mutex_unlock(&curr->mutex);
+      if (curr->key != key) {
         pthread_mutex_unlock(&prev->mutex);
+        pthread_mutex_unlock(&curr->mutex);
         return false;
       }
       prev->next = curr->next;
-      pthread_mutex_unlock(&curr->mutex);
       pthread_mutex_unlock(&prev->mutex);
+      pthread_mutex_unlock(&curr->mutex);
 
       // free(curr);
       break;
