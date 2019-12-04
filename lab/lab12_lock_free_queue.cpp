@@ -13,10 +13,6 @@ using namespace std;
 
 #define QUEUE_SIZE      1024
 
-bool flag_verification[NUM_PRODUCER * NUM_ENQUEUE_PER_PRODUCER];
-void enqueue(int key);
-int dequeue();
-
 typedef struct QueueNode {
     int key;
     uint64_t flag;
@@ -71,6 +67,7 @@ public:
   }
 };
 
+bool flag_verification[NUM_PRODUCER * NUM_ENQUEUE_PER_PRODUCER];
 Queue queue(QUEUE_SIZE);
 
 void ProducerFunc(int tid) {
