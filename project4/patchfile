@@ -23,7 +23,7 @@ index ac6d3f87de3..6d245e3fa18 100644
  
  int my_pthread_mutex_trylock(pthread_mutex_t *mutex)
 diff --git storage/innobase/buf/buf0buf.cc storage/innobase/buf/buf0buf.cc
-index 41d242a9360..6e02e5b66e2 100644
+index 41d242a9360..5d53f6a8d45 100644
 --- storage/innobase/buf/buf0buf.cc
 +++ storage/innobase/buf/buf0buf.cc
 @@ -80,37 +80,37 @@ Created 11/5/1995 Heikki Tuuri
@@ -2266,16 +2266,17 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -1632,96 +1632,98 @@ static
+@@ -1632,96 +1632,101 @@ static
  buf_chunk_t*
  buf_chunk_init(
  /*===========*/
 -	buf_pool_t*	buf_pool,	/*!< in: buffer pool instance */
 -	buf_chunk_t*	chunk,		/*!< out: chunk of buffers */
 -	ulint		mem_size)	/*!< in: requested size in bytes */
-+  buf_pool_t*	buf_pool,	/*!< in: buffer pool instance */
-+  buf_chunk_t*	chunk,		/*!< out: chunk of buffers */
-+  ulint		mem_size)	/*!< in: requested size in bytes */
++  buf_pool_t*  buf_pool,            /*!< in: buffer pool instance */
++  buf_chunk_t* chunk,               /*!< out: chunk of buffers */
++  ulint	       mem_size,            /*!< in: requested size in bytes */
++  bool         is_parallel = false) /*!< in: if true, get mutex to append free list */
  {
 -	buf_block_t*	block;
 -	byte*		frame;
@@ -2399,10 +2400,12 @@ index 41d242a9360..6e02e5b66e2 100644
  
 -		/* Add the block to the free list */
 -		UT_LIST_ADD_LAST(buf_pool->free, &block->page);
-+    buf_pool_mutex_enter(buf_pool);
++    if (is_parallel)
++      buf_pool_mutex_enter(buf_pool);
 +    /* Add the block to the free list */
 +    UT_LIST_ADD_LAST(buf_pool->free, &block->page);
-+    buf_pool_mutex_exit(buf_pool);
++    if (is_parallel)
++      buf_pool_mutex_exit(buf_pool);
  
 -		ut_d(block->page.in_free_list = TRUE);
 -		ut_ad(buf_pool_from_block(block) == buf_pool);
@@ -2428,7 +2431,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #ifdef UNIV_DEBUG
-@@ -1733,22 +1735,22 @@ static
+@@ -1733,22 +1738,22 @@ static
  buf_block_t*
  buf_chunk_contains_zip(
  /*===================*/
@@ -2462,7 +2465,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -1758,24 +1760,24 @@ given compressed page.
+@@ -1758,24 +1763,24 @@ given compressed page.
  buf_block_t*
  buf_pool_contains_zip(
  /*==================*/
@@ -2500,7 +2503,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* UNIV_DEBUG */
  
-@@ -1786,61 +1788,61 @@ static
+@@ -1786,61 +1791,61 @@ static
  const buf_block_t*
  buf_chunk_not_freed(
  /*================*/
@@ -2616,7 +2619,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -1850,33 +1852,68 @@ void
+@@ -1850,33 +1855,68 @@ void
  buf_pool_set_sizes(void)
  /*====================*/
  {
@@ -2679,7 +2682,7 @@ index 41d242a9360..6e02e5b66e2 100644
 +  ulint total_allocated = 0;
 +
 +  do {
-+    if (!buf_chunk_init(buf_pool, chunk, chunk_size)) {
++    if (!buf_chunk_init(buf_pool, chunk, chunk_size, true)) {
 +      while (--chunk >= start_chunk) {
 +        buf_block_t*	block = chunk->blocks;
 +
@@ -2701,7 +2704,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -1886,149 +1923,212 @@ static
+@@ -1886,149 +1926,212 @@ static
  ulint
  buf_pool_init_instance(
  /*===================*/
@@ -2814,7 +2817,7 @@ index 41d242a9360..6e02e5b66e2 100644
 +    ulint cpu_cores = sysconf(_SC_NPROCESSORS_ONLN);
 +    cpu_cores = cpu_cores <= 2 ? 1 : cpu_cores;
 +    ulint chunks_per_thread = buf_pool->n_chunks / cpu_cores;
-+    // cpu_cores = 1;
++
 +    if (cpu_cores == 1 || chunks_per_thread == 0) {
 +      do {
 +        if (!buf_chunk_init(buf_pool, chunk, chunk_size)) {
@@ -2846,11 +2849,11 @@ index 41d242a9360..6e02e5b66e2 100644
 +      for (i = 0; i < cpu_cores; i++) {
 +        buf_chunk_t *last_chunk = (i == cpu_cores - 1) ? buf_pool->chunks + buf_pool->n_chunks : buf_pool->chunks + (i+1) * chunks_per_thread;
 +        threads[i] = std::thread(parallel_buf_chunk_init,
-+                                 buf_pool,
-+                                 buf_pool->chunks + i * chunks_per_thread,
-+                                 last_chunk,
-+                                 chunk_size,
-+                                 &mem_allocated[i]);
++                                  buf_pool,
++                                  buf_pool->chunks + i * chunks_per_thread,
++                                  last_chunk,
++                                  chunk_size,
++                                  &mem_allocated[i]);
 +      }
 +
 +      bool allocation_succeed = true;
@@ -3023,7 +3026,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -2037,70 +2137,70 @@ static
+@@ -2037,70 +2140,70 @@ static
  void
  buf_pool_free_instance(
  /*===================*/
@@ -3157,7 +3160,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -2109,47 +2209,47 @@ Creates the buffer pool.
+@@ -2109,47 +2212,47 @@ Creates the buffer pool.
  dberr_t
  buf_pool_init(
  /*==========*/
@@ -3232,7 +3235,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -2158,17 +2258,17 @@ freeing all mutexes. */
+@@ -2158,17 +2261,17 @@ freeing all mutexes. */
  void
  buf_pool_free(
  /*==========*/
@@ -3258,7 +3261,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Reallocate a control block.
-@@ -2178,142 +2278,142 @@ buf_pool_free(
+@@ -2178,142 +2281,142 @@ buf_pool_free(
  static
  bool
  buf_page_realloc(
@@ -3527,7 +3530,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Sets the global variable that feeds MySQL's innodb_buffer_pool_resize_status
-@@ -2324,21 +2424,21 @@ same as the ones used for printf(3).
+@@ -2324,21 +2427,21 @@ same as the ones used for printf(3).
  static
  void
  buf_resize_status(
@@ -3559,7 +3562,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Determines if a block is intended to be withdrawn.
-@@ -2347,26 +2447,26 @@ buf_resize_status(
+@@ -2347,26 +2450,26 @@ buf_resize_status(
  @retval true	if will be withdrawn */
  bool
  buf_block_will_withdrawn(
@@ -3605,7 +3608,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Determines if a frame is intended to be withdrawn.
-@@ -2375,27 +2475,27 @@ buf_block_will_withdrawn(
+@@ -2375,27 +2478,27 @@ buf_block_will_withdrawn(
  @retval true	if will be withdrawn */
  bool
  buf_frame_will_withdrawn(
@@ -3653,7 +3656,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Withdraw the buffer pool blocks from end of the buffer pool instance
-@@ -2405,212 +2505,212 @@ until withdrawn by buf_pool->withdraw_target.
+@@ -2405,212 +2508,212 @@ until withdrawn by buf_pool->withdraw_target.
  static
  bool
  buf_pool_withdraw_blocks(
@@ -4071,7 +4074,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** resize page_hash and zip_hash for a buffer pool instance.
-@@ -2618,79 +2718,79 @@ buf_pool_withdraw_blocks(
+@@ -2618,79 +2721,79 @@ buf_pool_withdraw_blocks(
  static
  void
  buf_pool_resize_hash(
@@ -4204,7 +4207,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #ifndef DBUG_OFF
-@@ -2699,14 +2799,14 @@ static
+@@ -2699,14 +2802,14 @@ static
  void
  buf_pool_resize_chunk_make_null(buf_chunk_t** new_chunks)
  {
@@ -4225,7 +4228,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif // DBUG_OFF
  
-@@ -2716,474 +2816,474 @@ static
+@@ -2716,474 +2819,474 @@ static
  void
  buf_pool_resize()
  {
@@ -5066,7 +5069,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** This is the thread for resizing buffer pool. It waits for an event and
-@@ -3194,38 +3294,38 @@ extern "C"
+@@ -3194,38 +3297,38 @@ extern "C"
  os_thread_ret_t
  DECLARE_THREAD(buf_resize_thread)(void*)
  {
@@ -5129,7 +5132,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #ifdef BTR_CUR_HASH_ADAPT
-@@ -3233,58 +3333,58 @@ DECLARE_THREAD(buf_resize_thread)(void*)
+@@ -3233,58 +3336,58 @@ DECLARE_THREAD(buf_resize_thread)(void*)
  void
  buf_pool_clear_hash_index()
  {
@@ -5230,7 +5233,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* BTR_CUR_HASH_ADAPT */
  
-@@ -3296,83 +3396,83 @@ static
+@@ -3296,83 +3399,83 @@ static
  void
  buf_relocate(
  /*=========*/
@@ -5377,7 +5380,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Hazard Pointer implementation. */
-@@ -3382,11 +3482,11 @@ buf_relocate(
+@@ -3382,11 +3485,11 @@ buf_relocate(
  void
  HazardPointer::set(buf_page_t* bpage)
  {
@@ -5393,7 +5396,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Checks if a bpage is the hp
-@@ -3396,11 +3496,11 @@ HazardPointer::set(buf_page_t* bpage)
+@@ -3396,11 +3499,11 @@ HazardPointer::set(buf_page_t* bpage)
  bool
  HazardPointer::is_hp(const buf_page_t* bpage)
  {
@@ -5409,7 +5412,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Adjust the value of hp. This happens when some other thread working
-@@ -3410,14 +3510,14 @@ on the same list attempts to remove the hp from the list.
+@@ -3410,14 +3513,14 @@ on the same list attempts to remove the hp from the list.
  void
  FlushHp::adjust(const buf_page_t* bpage)
  {
@@ -5430,7 +5433,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Adjust the value of hp. This happens when some other thread working
-@@ -3427,14 +3527,14 @@ on the same list attempts to remove the hp from the list.
+@@ -3427,14 +3530,14 @@ on the same list attempts to remove the hp from the list.
  void
  LRUHp::adjust(const buf_page_t* bpage)
  {
@@ -5451,7 +5454,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Selects from where to start a scan. If we have scanned too deep into
-@@ -3444,13 +3544,13 @@ the LRU list it resets the value to the tail of the LRU list.
+@@ -3444,13 +3547,13 @@ the LRU list it resets the value to the tail of the LRU list.
  buf_page_t*
  LRUItr::start()
  {
@@ -5470,7 +5473,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Determine if a block is a sentinel for a buffer pool watch.
-@@ -3459,27 +3559,27 @@ LRUItr::start()
+@@ -3459,27 +3562,27 @@ LRUItr::start()
  @return TRUE if a sentinel for a buffer pool watch, FALSE if not */
  ibool
  buf_pool_watch_is_sentinel(
@@ -5514,7 +5517,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Add watch for the given page to be read in. Caller must have
-@@ -3491,116 +3591,116 @@ hash_lock and reacquire it.
+@@ -3491,116 +3594,116 @@ hash_lock and reacquire it.
  static
  buf_page_t*
  buf_pool_watch_set(
@@ -5735,7 +5738,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Remove the sentinel block for the watch before replacing it with a
-@@ -3612,22 +3712,22 @@ that the block has been replaced with the real block.
+@@ -3612,22 +3715,22 @@ that the block has been replaced with the real block.
  static
  void
  buf_pool_watch_remove(
@@ -5769,7 +5772,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Stop watching if the page has been read in.
-@@ -3635,30 +3735,30 @@ buf_pool_watch_set(same_page_id) must have returned NULL before.
+@@ -3635,30 +3738,30 @@ buf_pool_watch_set(same_page_id) must have returned NULL before.
  @param[in]	page_id	page id */
  void buf_pool_watch_unset(const page_id_t page_id)
  {
@@ -5824,7 +5827,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Check if the page has been read in.
-@@ -3668,24 +3768,24 @@ has returned NULL and before invoking buf_pool_watch_unset(same_page_id).
+@@ -3668,24 +3771,24 @@ has returned NULL and before invoking buf_pool_watch_unset(same_page_id).
  @return false if the given page was not read in, true if it was */
  bool buf_pool_watch_occurred(const page_id_t page_id)
  {
@@ -5862,7 +5865,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -3695,17 +3795,17 @@ the buffer pool. */
+@@ -3695,17 +3798,17 @@ the buffer pool. */
  void
  buf_page_make_young(
  /*================*/
@@ -5886,7 +5889,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #ifdef UNIV_DEBUG
-@@ -3718,24 +3818,24 @@ reallocated.
+@@ -3718,24 +3821,24 @@ reallocated.
  @return control block if found in page hash table, otherwise NULL */
  buf_page_t* buf_page_set_file_page_was_freed(const page_id_t page_id)
  {
@@ -5929,7 +5932,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Sets file_page_was_freed FALSE if the page is found in the buffer pool.
-@@ -3746,21 +3846,21 @@ reallocated.
+@@ -3746,21 +3849,21 @@ reallocated.
  @return control block if found in page hash table, otherwise NULL */
  buf_page_t* buf_page_reset_file_page_was_freed(const page_id_t page_id)
  {
@@ -5966,7 +5969,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* UNIV_DEBUG */
  
-@@ -3769,24 +3869,24 @@ The caller should not be holding any mutexes when this function is called.
+@@ -3769,24 +3872,24 @@ The caller should not be holding any mutexes when this function is called.
  @param[in]	page_id	page id */
  static void buf_block_try_discard_uncompressed(const page_id_t page_id)
  {
@@ -6005,7 +6008,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Get read access to a compressed page (usually of type
-@@ -3801,125 +3901,125 @@ the same set of mutexes or latches.
+@@ -3801,125 +3904,125 @@ the same set of mutexes or latches.
  @return pointer to the block */
  buf_page_t* buf_page_get_zip(const page_id_t page_id, ulint zip_size)
  {
@@ -6222,7 +6225,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -3928,19 +4028,19 @@ UNIV_INLINE
+@@ -3928,19 +4031,19 @@ UNIV_INLINE
  void
  buf_block_init_low(
  /*===============*/
@@ -6253,7 +6256,7 @@ index 41d242a9360..6e02e5b66e2 100644
  #endif /* BTR_CUR_HASH_ADAPT */
  }
  
-@@ -3950,96 +4050,96 @@ Decompress a block.
+@@ -3950,96 +4053,96 @@ Decompress a block.
  ibool
  buf_zip_decompress(
  /*===============*/
@@ -6437,7 +6440,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #ifdef BTR_CUR_HASH_ADAPT
-@@ -4050,40 +4150,40 @@ This function does not return if the block is not identified.
+@@ -4050,40 +4153,40 @@ This function does not return if the block is not identified.
  buf_block_t*
  buf_block_from_ahi(const byte* ptr)
  {
@@ -6503,7 +6506,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* BTR_CUR_HASH_ADAPT */
  
-@@ -4096,26 +4196,26 @@ static
+@@ -4096,26 +4199,26 @@ static
  ibool
  buf_pointer_is_block_field_instance(
  /*================================*/
@@ -6545,7 +6548,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -4125,21 +4225,21 @@ the buf_block_t itself or a member of it
+@@ -4125,21 +4228,21 @@ the buf_block_t itself or a member of it
  ibool
  buf_pointer_is_block_field(
  /*=======================*/
@@ -6578,7 +6581,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -4149,16 +4249,16 @@ static
+@@ -4149,16 +4252,16 @@ static
  ibool
  buf_block_is_uncompressed(
  /*======================*/
@@ -6603,7 +6606,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #if defined UNIV_DEBUG || defined UNIV_IBUF_DEBUG
-@@ -4170,8 +4270,8 @@ bool
+@@ -4170,8 +4273,8 @@ bool
  buf_debug_execute_is_force_flush()
  /*==============================*/
  {
@@ -6614,7 +6617,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* UNIV_DEBUG || UNIV_IBUF_DEBUG */
  
-@@ -4180,40 +4280,40 @@ buf_debug_execute_is_force_flush()
+@@ -4180,40 +4283,40 @@ buf_debug_execute_is_force_flush()
  static
  void
  buf_wait_for_read(
@@ -6679,7 +6682,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** This is the general function used to get access to a database page.
-@@ -4234,700 +4334,700 @@ reading the page from file.
+@@ -4234,700 +4337,700 @@ reading the page from file.
  @return pointer to the block or NULL */
  buf_block_t*
  buf_page_get_gen(
@@ -7961,7 +7964,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -4937,103 +5037,103 @@ page.
+@@ -4937,103 +5040,103 @@ page.
  ibool
  buf_page_optimistic_get(
  /*====================*/
@@ -8133,7 +8136,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Given a tablespace id and page number tries to get that page. If the
-@@ -5046,76 +5146,76 @@ Suitable for using when holding the lock_sys_t::mutex.
+@@ -5046,76 +5149,76 @@ Suitable for using when holding the lock_sys_t::mutex.
  @return pointer to a page or NULL */
  buf_block_t*
  buf_page_try_get_func(
@@ -8258,7 +8261,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -5124,24 +5224,24 @@ UNIV_INLINE
+@@ -5124,24 +5227,24 @@ UNIV_INLINE
  void
  buf_page_init_low(
  /*==============*/
@@ -8300,7 +8303,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Inits a page to the buffer buf_pool.
-@@ -5152,81 +5252,81 @@ buf_page_init_low(
+@@ -5152,81 +5255,81 @@ buf_page_init_low(
  static
  void
  buf_page_init(
@@ -8434,7 +8437,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Initialize a page for read to the buffer buf_pool. If the page is
-@@ -5242,236 +5342,236 @@ and the lock released later.
+@@ -5242,236 +5345,236 @@ and the lock released later.
  @param[in]	page_id			page id
  @param[in]	zip_size		ROW_FORMAT=COMPRESSED page size, or 0
  @param[in]	unzip			whether the uncompressed page is
@@ -8858,7 +8861,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Initialize a page in the buffer pool. The page is usually not read
-@@ -5484,136 +5584,136 @@ FILE_PAGE (the other is buf_page_get_gen).
+@@ -5484,136 +5587,136 @@ FILE_PAGE (the other is buf_page_get_gen).
  @return pointer to the block, page bufferfixed */
  buf_block_t*
  buf_page_create(
@@ -9088,7 +9091,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /********************************************************************//**
-@@ -5624,104 +5724,104 @@ static
+@@ -5624,104 +5727,104 @@ static
  void
  buf_page_monitor(
  /*=============*/
@@ -9290,7 +9293,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Mark a table corrupted.
-@@ -5730,15 +5830,15 @@ buf_page_monitor(
+@@ -5730,15 +5833,15 @@ buf_page_monitor(
  ATTRIBUTE_COLD
  static void buf_mark_space_corrupt(buf_page_t* bpage, const fil_space_t& space)
  {
@@ -9315,7 +9318,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Mark a table corrupted.
-@@ -5749,43 +5849,43 @@ static
+@@ -5749,43 +5852,43 @@ static
  void
  buf_corrupt_page_release(buf_page_t* bpage, const fil_space_t* space)
  {
@@ -9387,7 +9390,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Check if the encrypted page is corrupted for the full crc32 format.
-@@ -5794,21 +5894,21 @@ buf_corrupt_page_release(buf_page_t* bpage, const fil_space_t* space)
+@@ -5794,21 +5897,21 @@ buf_corrupt_page_release(buf_page_t* bpage, const fil_space_t* space)
  @param[in]	is_compressed	compressed page
  @return true if page is corrupted or false if it isn't */
  static bool buf_page_full_crc32_is_corrupted(
@@ -9421,7 +9424,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Check if page is maybe compressed, encrypted or both when we encounter
-@@ -5824,63 +5924,63 @@ after decryption normal page checksum does not match.
+@@ -5824,63 +5927,63 @@ after decryption normal page checksum does not match.
  @retval	DB_TABLESPACE_DELETED	if accessed tablespace is not found */
  static dberr_t buf_page_check_corrupt(buf_page_t* bpage, fil_space_t* space)
  {
@@ -9542,7 +9545,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Complete a read or write request of a file page to or from the buffer pool.
-@@ -5892,274 +5992,274 @@ static dberr_t buf_page_check_corrupt(buf_page_t* bpage, fil_space_t* space)
+@@ -5892,274 +5995,274 @@ static dberr_t buf_page_check_corrupt(buf_page_t* bpage, fil_space_t* space)
  @retval	DB_TABLESPACE_DELETED	if the tablespace does not exist
  @retval	DB_PAGE_CORRUPTED	if the checksum fails on a page read
  @retval	DB_DECRYPTION_FAILED	if page post encryption checksum matches but
@@ -10077,7 +10080,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6169,28 +6269,28 @@ static
+@@ -6169,28 +6272,28 @@ static
  ibool
  buf_all_freed_instance(
  /*===================*/
@@ -10120,7 +10123,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Refreshes the statistics used to print per-second averages.
-@@ -6198,10 +6298,10 @@ buf_all_freed_instance(
+@@ -6198,10 +6301,10 @@ buf_all_freed_instance(
  static
  void
  buf_refresh_io_stats(
@@ -10134,7 +10137,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6210,54 +6310,54 @@ static
+@@ -6210,54 +6313,54 @@ static
  void
  buf_pool_invalidate_instance(
  /*=========================*/
@@ -10223,7 +10226,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6268,11 +6368,11 @@ void
+@@ -6268,11 +6371,11 @@ void
  buf_pool_invalidate(void)
  /*=====================*/
  {
@@ -10239,7 +10242,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #if defined UNIV_DEBUG || defined UNIV_BUF_DEBUG
-@@ -6283,224 +6383,224 @@ static
+@@ -6283,224 +6386,224 @@ static
  ibool
  buf_pool_validate_instance(
  /*=======================*/
@@ -10680,7 +10683,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6510,16 +6610,16 @@ ibool
+@@ -6510,16 +6613,16 @@ ibool
  buf_validate(void)
  /*==============*/
  {
@@ -10704,7 +10707,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #endif /* UNIV_DEBUG || UNIV_BUF_DEBUG */
-@@ -6531,94 +6631,94 @@ static
+@@ -6531,94 +6634,94 @@ static
  void
  buf_print_instance(
  /*===============*/
@@ -10865,7 +10868,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6627,14 +6727,14 @@ void
+@@ -6627,14 +6730,14 @@ void
  buf_print(void)
  /*===========*/
  {
@@ -10886,7 +10889,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  #endif /* UNIV_DEBUG_PRINT || UNIV_DEBUG || UNIV_BUF_DEBUG */
  
-@@ -6646,88 +6746,88 @@ static
+@@ -6646,88 +6749,88 @@ static
  ulint
  buf_get_latched_pages_number_instance(
  /*==================================*/
@@ -11056,7 +11059,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6737,19 +6837,19 @@ ulint
+@@ -6737,19 +6840,19 @@ ulint
  buf_get_latched_pages_number(void)
  /*==============================*/
  {
@@ -11085,7 +11088,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  #endif /* UNIV_DEBUG */
-@@ -6761,13 +6861,13 @@ ulint
+@@ -6761,13 +6864,13 @@ ulint
  buf_get_n_pending_read_ios(void)
  /*============================*/
  {
@@ -11104,7 +11107,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6778,19 +6878,19 @@ double
+@@ -6778,19 +6881,19 @@ double
  buf_get_modified_ratio_pct(void)
  /*============================*/
  {
@@ -11133,7 +11136,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*******************************************************************//**
-@@ -6799,55 +6899,55 @@ static
+@@ -6799,55 +6902,55 @@ static
  void
  buf_stats_aggregate_pool_info(
  /*==========================*/
@@ -11237,7 +11240,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  /*******************************************************************//**
  Collect buffer pool stats information for a buffer pool. Also
-@@ -6856,133 +6956,133 @@ in the server */
+@@ -6856,133 +6959,133 @@ in the server */
  void
  buf_stats_get_pool_info(
  /*====================*/
@@ -11456,7 +11459,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -6991,92 +7091,92 @@ static
+@@ -6991,92 +7094,92 @@ static
  void
  buf_print_io_instance(
  /*==================*/
@@ -11634,7 +11637,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -7084,61 +7184,61 @@ Prints info of the buffer i/o. */
+@@ -7084,61 +7187,61 @@ Prints info of the buffer i/o. */
  void
  buf_print_io(
  /*=========*/
@@ -11750,7 +11753,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /**********************************************************************//**
-@@ -7147,13 +7247,13 @@ void
+@@ -7147,13 +7250,13 @@ void
  buf_refresh_io_stats_all(void)
  /*==========================*/
  {
@@ -11769,7 +11772,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /**********************************************************************//**
-@@ -7163,17 +7263,17 @@ ibool
+@@ -7163,17 +7266,17 @@ ibool
  buf_all_freed(void)
  /*===============*/
  {
@@ -11795,7 +11798,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Verify that post encryption checksum match with the calculated checksum.
-@@ -7183,12 +7283,12 @@ This function should be called only if tablespace contains crypt data metadata.
+@@ -7183,12 +7286,12 @@ This function should be called only if tablespace contains crypt data metadata.
  @return true if true if page is encrypted and OK, false otherwise */
  bool buf_page_verify_crypt_checksum(const byte* page, ulint fsp_flags)
  {
@@ -11813,7 +11816,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /*********************************************************************//**
-@@ -7199,26 +7299,26 @@ ulint
+@@ -7199,26 +7302,26 @@ ulint
  buf_pool_check_no_pending_io(void)
  /*==============================*/
  {
@@ -11853,7 +11856,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Print the given page_id_t object.
-@@ -7227,12 +7327,12 @@ buf_pool_check_no_pending_io(void)
+@@ -7227,12 +7330,12 @@ buf_pool_check_no_pending_io(void)
  @return the output stream */
  std::ostream&
  operator<<(
@@ -11871,7 +11874,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Print the given buf_pool_t object.
-@@ -7241,26 +7341,26 @@ operator<<(
+@@ -7241,26 +7344,26 @@ operator<<(
  @return the output stream */
  std::ostream&
  operator<<(
@@ -11917,7 +11920,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Encrypt a buffer of temporary tablespace
-@@ -7269,29 +7369,29 @@ operator<<(
+@@ -7269,29 +7372,29 @@ operator<<(
  @param[in,out]	dst_frame	Output buffer
  @return encrypted buffer or NULL */
  static byte* buf_tmp_page_encrypt(
@@ -11965,7 +11968,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /** Encryption and page_compression hook that is called just before
-@@ -7304,154 +7404,154 @@ a page is written to disk.
+@@ -7304,154 +7407,154 @@ a page is written to disk.
  UNIV_INTERN
  byte*
  buf_page_encrypt(
@@ -12263,7 +12266,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /**
-@@ -7460,9 +7560,9 @@ Should we punch hole to deallocate unused portion of the page.
+@@ -7460,9 +7563,9 @@ Should we punch hole to deallocate unused portion of the page.
  @return true if punch hole should be used, false if not */
  bool
  buf_page_should_punch_hole(
@@ -12275,7 +12278,7 @@ index 41d242a9360..6e02e5b66e2 100644
  }
  
  /**
-@@ -7472,9 +7572,9 @@ Calculate the length of trim (punch_hole) operation.
+@@ -7472,9 +7575,9 @@ Calculate the length of trim (punch_hole) operation.
  @return length of the trim or zero. */
  ulint
  buf_page_get_trim_length(
