@@ -8,20 +8,24 @@ Projects for the 2019 Hanyang Univ. Concurrent Programming Course taught by Prof
 
 ## Table of Contents
 
-* #### [Project1 - Parallel External Sort](./project1)
+* **[Project1 - Parallel External Sort](./project1)**
   Sorting maximum of 4GB <key, value> set with memory limitation of 2GB.
 
-* #### [Project2 - Database with Hand-made Read/Write Lock](./project2)
+
+* **[Project2 - Database with Hand-made Read/Write Lock](./project2)**
   Create own read/write lock & test validation.<br>
   It also performs deadlock detection & resolves deadlock.
 
-* #### [Project3 - Wait-free Snapshot](./project3)
+
+* **[Project3 - Wait-free Snapshot](./project3)**
   Capturing Wait-free Snapshot & Implementing Epoch-based Garbage Collection.
 
-* #### [Project4 - Scalable MariaDB Buffer Pool Initialization](./project4)
+
+* **[Project4 - Scalable MariaDB Buffer Pool Initialization](./project4)**
   Reduce MariaDB's buffer pool initialization time by implementing parallel buffer pool initialization.
 
-* #### [Lab Works](./lab)
+
+* **[Lab Works](./lab)**
     * Hand-made Locks
         * [TAS Lock](./lab/lab10_prac_tas_lock.cpp)
         * [TTAS Lock](./lab/lab10_prac_ttas_lock.cpp)
