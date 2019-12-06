@@ -10,7 +10,12 @@ mariaDB's last commit : `0117d0e65ac8051bc9f6d14764a2ab05e69bd895`
 
 ## Table of Contents
 
-
+* [Buffer Pool Analysis](#buffer-pool-analysis)
+* [Initializing Buffer Pool](#initializing-buffer-pool)
+  * [Concurrent Initializing](#concurrent-initializing)
+    * [Implementation Notice](#implementation-notice)
+    * [Modifyied Functions](#modifyied-functions)
+* [Test Results](#test-results)
 
 ## Buffer Pool Analysis
 
@@ -147,17 +152,20 @@ if (cpu_cores == 1 || chunks_per_thread == 0) {
 
 * Any failure on allocating chunks must be handled carefully. Program must deallocate all chunks before return wil `DB_ERROR`. It is bit more tricky since chunks are allocated simultaneously, but is well handled.
 
-* `buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
-
+* Concurrent Initialization may cause MariaDB to unexpectedly shutdown due to malfunction in buffer pool's free list.
+![DB Error](./assets/DB_error.png)
+  
+  `buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
+  
   ```c++
   if (is_parallel)
     buf_pool_mutex_enter(buf_pool);
   /* Add the block to the free list */
   UT_LIST_ADD_LAST(buf_pool->free, &block->page);
-  if (is_parallel)
+if (is_parallel)
     buf_pool_mutex_exit(buf_pool);
   ```
-
+  
   Critical section is covered by buf_pool mutex so only one thread may append to free list at the time. Without protecting critical section, using buffer pool such as running sysbench will cause error which ends up in shutdown. 
 
 #### Modifyied Functions
@@ -308,3 +316,52 @@ buf_chunk_init(
 }
 ```
 
+
+
+## Test Results
+
+###### Tested Environment
+
+Virtual Machine<br>CPU: i7-6700 4 cores 3.40 GHz<br>RAM: 8 GB<br>OS: Linux 18.04<br>
+
+![6GB_VM_1_thread](./assets/6GB_vm_1_thread.png)
+
+![6GB_vm_8_threads](./assets/6GB_vm_8_threads.png)
+
+My Virtual Machine showed no difference in elapsed time. So I borrowed native linux machine for further tests.
+
+
+
+###### Tested Environment
+
+CPU: i7-9700K 8 cores 3.60 GHz<br>RAM: 32 GB<br>OS: Linux 18.04<br>Storage: Samsung 860 EVO 1TB
+
+###### 2 GB
+
+![2GB_1_thread](./assets/2GB_1_thread.png)
+
+![2GB_8_threads](./assets/2GB_8_threads.png)
+
+###### 4 GB
+
+![4GB_1_thread](./assets/4GB_1_thread.png)
+
+![4GB_8_threads](./assets/4GB_8_threads.png)
+
+###### 8 GB
+
+![8GB_1_thread](./assets/8GB_1_thread.png)
+
+![8GB_8_threads](./assets/8GB_8_threads.png)
+
+###### 16 GB
+
+![16GB_1_thread](./assets/16GB_1_thread.png)
+
+![16GB_8_threads](./assets/16GB_8_threads.png)
+
+###### Chart
+
+![Buffer Pool Initialization Time](./assets/Buffer Pool Initialization Time.png)
+
+As you can clearly see from the chart, multi thread completes initialization much faster. And performance gap between concurrent / sequential initialization gets bigger as the buffer pool size increases. So if hardware supports multi-core & large memory, it would be better to use concurrent buffer pool initialization to save some time in a boot up scenario.
