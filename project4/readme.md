@@ -159,7 +159,8 @@ if (cpu_cores == 1 || chunks_per_thread == 0) {
 
 * If there is too few running cores, it will run original code instead of creating threads.
 
-* Any failure on allocating chunks must be handled carefully. Program must deallocate all chunks before return wil `DB_ERROR`. It is bit more tricky since chunks are allocated simultaneously, but is well handled.
+* Any failure on allocating chunks must be handled carefully. Program must deallocate all chunks before return wil `DB_ERROR`.<br>
+  It is a bit more tricky since chunks are allocated simultaneously, but is well handled.
 
 * Concurrent Initialization may cause MariaDB to unexpectedly shutdown due to malfunction in buffer pool's free list.
   ![DB Error](./assets/DB_error.png)
