@@ -1,4 +1,4 @@
-# Multi-thread Database
+# Wait-free Snapshot
 
 [![GitHub issue author](https://img.shields.io/badge/author-Dae%20In%20Lee-blue.svg)](https://github.com/LazyRen)
 

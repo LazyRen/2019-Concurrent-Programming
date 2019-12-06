@@ -1,4 +1,4 @@
-# Multi-thread Database
+# Database with Hand-made Read/Write Lock
 
 [![GitHub issue author](https://img.shields.io/badge/author-Dae%20In%20Lee-blue.svg)](https://github.com/LazyRen)
 
