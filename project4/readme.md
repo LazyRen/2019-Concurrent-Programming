@@ -23,14 +23,22 @@ MariaDB internally holds `N` buffer pool instances. Each buffer pool instance ho
 
 ![Buffer Pool](./assets/buffer_pool.png)
 
-Each buffer pool instance is allocated in buffer chunks. So the actual memory allocation is done while initializing the chunks. Initailized memory will be controled by control blocks. Colored in red in above picture. They have pointer, lock, detailed information about designated frame. Note that MariaDB uses LRU policy for the buffer pool. So each buffer pool instance maintain free / flush / LRU lists to function as a buffer pool.
+Each buffer pool instance is allocated in buffer chunks. So the actual memory allocation is done while initializing the chunks.<br>
+Initailized memory will be controled by control blocks. Colored in red in above picture.<br>
+They have pointer, lock, detailed information about designated frame.<br>
+Note that MariaDB uses LRU policy for the buffer pool.<br>
+So each buffer pool instance maintain free / flush / LRU lists to function as a buffer pool.
 
 
 
 ## Initializing Buffer Pool
 
 You can change buffer pool's size & number of instances by modifying `mariadb/server/inst/my.cnf` file.<br>
-Recommended buffer pool size is 70-80% of the total available memory, since DB will use about 10% more than the specified size to control buffer pool. Chunk size's default value is 128MB. During the boot up of server(`srv_start()`), program calls `buf_pool_init()` to start initializing buffer pool. Within the function, it calls multiple `buf_pool_init_instance()` sequentially. Buffer pool instance has own mutex, lists to initialize. But most time consuming job is to initialize multiple buffer chunks. Original code handles this initializing sequentially like below.
+Recommended buffer pool size is 70-80% of the total available memory, since DB will use about 10% more than the specified size to control buffer pool.<br>
+Chunk size's default value is 128MB. During the boot up of server(`srv_start()`), program calls `buf_pool_init()` to start initializing buffer pool.<br>
+Within the function, it calls multiple `buf_pool_init_instance()` sequentially.<br>
+Buffer pool instance has own mutex, lists to initialize. But most time consuming job is to initialize multiple buffer chunks.<br>
+Original code handles this initializing sequentially like below(`buf0buf.cc`).
 
 ```c++
 do {
@@ -154,19 +162,19 @@ if (cpu_cores == 1 || chunks_per_thread == 0) {
 * Any failure on allocating chunks must be handled carefully. Program must deallocate all chunks before return wil `DB_ERROR`. It is bit more tricky since chunks are allocated simultaneously, but is well handled.
 
 * Concurrent Initialization may cause MariaDB to unexpectedly shutdown due to malfunction in buffer pool's free list.
-![DB Error](./assets/DB_error.png)
-`buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
+  ![DB Error](./assets/DB_error.png)
+  `buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
 
-```c++
-if (is_parallel)
-  buf_pool_mutex_enter(buf_pool);
-/* Add the block to the free list */
-UT_LIST_ADD_LAST(buf_pool->free, &block->page);
-if (is_parallel)
-  buf_pool_mutex_exit(buf_pool);
-```
+  ```c++
+  if (is_parallel)
+    buf_pool_mutex_enter(buf_pool);
+  /* Add the block to the free list */
+  UT_LIST_ADD_LAST(buf_pool->free, &block->page);
+  if (is_parallel)
+    buf_pool_mutex_exit(buf_pool);
+  ```
 
-Critical section is covered by buf_pool mutex so only one thread may append to free list at the time. Without protecting critical section, using buffer pool such as running sysbench will cause error which ends up in shutdown.
+  Critical section is covered by buf_pool mutex so only one thread may append to free list at the time.<br>Without protecting critical section, using buffer pool such as running sysbench will cause error which ends up in shutdown.
 
 #### Modifyied Functions
 
@@ -322,19 +330,26 @@ buf_chunk_init(
 
 ###### Tested Environment
 
-Virtual Machine<br>CPU: i7-6700 4 cores 3.40 GHz<br>RAM: 8 GB<br>OS: Linux 18.04<br>
+Virtual Machine<br>
+CPU: i7-6700 4 cores 3.40 GHz<br>
+RAM: 8 GB<br>
+OS: Linux 18.04<br>
 
 ![6GB_VM_1_thread](./assets/6GB_vm_1_thread.png)
 
 ![6GB_vm_8_threads](./assets/6GB_vm_8_threads.png)
 
-My Virtual Machine showed no difference in elapsed time. So I borrowed native linux machine for further tests.
+My Virtual Machine showed no difference in elapsed time.<br>
+So I borrowed native linux machine for further tests.
 
 
 
 ###### Tested Environment
 
-CPU: i7-9700K 8 cores 3.60 GHz<br>RAM: 32 GB<br>OS: Linux 18.04<br>Storage: Samsung 860 EVO 1TB
+CPU: i7-9700K 8 cores 3.60 GHz<br>
+RAM: 32 GB<br>
+OS: Linux 18.04<br>
+Storage: Samsung 860 EVO 1TB<br>
 
 ###### 2 GB
 
@@ -364,4 +379,5 @@ CPU: i7-9700K 8 cores 3.60 GHz<br>RAM: 32 GB<br>OS: Linux 18.04<br>Storage: Sams
 
 ![Buffer Pool Initialization Time](./assets/Buffer Pool Initialization Time.png)
 
-As you can clearly see from the chart, multi thread completes initialization much faster. And performance gap between concurrent / sequential initialization gets bigger as the buffer pool size increases. So if hardware supports multi-core & large memory, it would be better to use concurrent buffer pool initialization to save some time in a boot up scenario.
+As you can clearly see from the chart, multi thread completes initialization much faster.<br>
+And performance gap between concurrent / sequential initialization gets bigger as the buffer pool size increases.<br>So if hardware supports multi-core & large memory, it would be better to use concurrent buffer pool initialization to save some time in a boot up scenario.
