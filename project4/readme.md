@@ -29,29 +29,30 @@ Each buffer pool instance is allocated in buffer chunks. So the actual memory al
 
 ## Initializing Buffer Pool
 
-You can change buffer pool's size & number of instances by modifying `/server/inst/my.cnf` file. Recommended buffer pool size is 70-80% of the total available memory, since DB will use about 10% more than the specified size to control buffer pool. Chunk size's default value is 128MB. During the boot up of server(`srv_start()`), program calls `buf_pool_init()` to start initializing buffer pool. Within the function, it calls multiple `buf_pool_init_instance()` sequentially. Buffer pool instance has own mutex, lists to initialize. But most time consuming job is to initialize multiple buffer chunks. Original code handles this initializing sequentially like below.
+You can change buffer pool's size & number of instances by modifying `mariadb/server/inst/my.cnf` file.<br>
+Recommended buffer pool size is 70-80% of the total available memory, since DB will use about 10% more than the specified size to control buffer pool. Chunk size's default value is 128MB. During the boot up of server(`srv_start()`), program calls `buf_pool_init()` to start initializing buffer pool. Within the function, it calls multiple `buf_pool_init_instance()` sequentially. Buffer pool instance has own mutex, lists to initialize. But most time consuming job is to initialize multiple buffer chunks. Original code handles this initializing sequentially like below.
 
 ```c++
 do {
-      if (!buf_chunk_init(buf_pool, chunk, chunk_size)) {
-        while (--chunk >= buf_pool->chunks) {
-          buf_block_t*	block = chunk->blocks;
+  if (!buf_chunk_init(buf_pool, chunk, chunk_size)) {
+    while (--chunk >= buf_pool->chunks) {
+      buf_block_t*	block = chunk->blocks;
 
-          for (i = chunk->size; i--; block++) {
-            buf_block_free_mutexes(block);
-          }
-
-          buf_pool->allocator.deallocate_large_dodump(
-            chunk->mem, &chunk->mem_pfx, chunk->mem_size());
-        }
-        ut_free(buf_pool->chunks);
-        buf_pool_mutex_exit(buf_pool);
-
-        return(DB_ERROR);
+      for (i = chunk->size; i--; block++) {
+        buf_block_free_mutexes(block);
       }
 
-      buf_pool->curr_size += chunk->size;
-    } while (++chunk < buf_pool->chunks + buf_pool->n_chunks);
+      buf_pool->allocator.deallocate_large_dodump(
+        chunk->mem, &chunk->mem_pfx, chunk->mem_size());
+    }
+    ut_free(buf_pool->chunks);
+    buf_pool_mutex_exit(buf_pool);
+
+    return(DB_ERROR);
+  }
+
+  buf_pool->curr_size += chunk->size;
+} while (++chunk < buf_pool->chunks + buf_pool->n_chunks);
 ```
 
 
@@ -154,19 +155,18 @@ if (cpu_cores == 1 || chunks_per_thread == 0) {
 
 * Concurrent Initialization may cause MariaDB to unexpectedly shutdown due to malfunction in buffer pool's free list.
 ![DB Error](./assets/DB_error.png)
-  
-  `buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
-  
-  ```c++
-  if (is_parallel)
-    buf_pool_mutex_enter(buf_pool);
-  /* Add the block to the free list */
-  UT_LIST_ADD_LAST(buf_pool->free, &block->page);
+`buf_chunk_init()` calls `buf_block_init()` to initialize control block. After that, each page needs to be appended to buffer pool's free list. Problem may occurs since free list is not concurrent list, and many pages simultaneously appending to free list. I've used buffer pool's mutex to handle this issue.
+
+```c++
 if (is_parallel)
-    buf_pool_mutex_exit(buf_pool);
-  ```
-  
-  Critical section is covered by buf_pool mutex so only one thread may append to free list at the time. Without protecting critical section, using buffer pool such as running sysbench will cause error which ends up in shutdown. 
+  buf_pool_mutex_enter(buf_pool);
+/* Add the block to the free list */
+UT_LIST_ADD_LAST(buf_pool->free, &block->page);
+if (is_parallel)
+  buf_pool_mutex_exit(buf_pool);
+```
+
+Critical section is covered by buf_pool mutex so only one thread may append to free list at the time. Without protecting critical section, using buffer pool such as running sysbench will cause error which ends up in shutdown.
 
 #### Modifyied Functions
 
