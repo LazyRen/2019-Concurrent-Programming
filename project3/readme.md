@@ -33,8 +33,8 @@ You must run either `make` or `make CFLAGS+=-DVERBOSE` once before executing `ru
 ### Tasks
 
 1. When program is executed, it first creates TaskRunner object with defined `number of threads` & `execution time`.
-2. Each thread keeps *update* its own variable in WFSnapshot for a given duration(1 min.) and total updates done by all threads will be returned after all jobs are finished
-3. While doing so,GC thread will be in charge of garbage collection of snapshot by using **Epoch Based Garbage Collection**. GC prevents any possible memory leak that can be caused within *update*. Detail of implementation will be explained [later](#epoch-based-garbage-collection).
+2. Each thread keeps *update* its own variable in WFSnapshot for a given duration(1 min.) and total updates done by all threads will be returned after all jobs are finished.
+3. While doing so, GC thread will be in charge of garbage collection of snapshot by using **Epoch Based Garbage Collection**.<br>GC prevents any possible memory leak that can be caused within *update*. Detail of implementation will be explained [later](#epoch-based-garbage-collection).
 
 
 
