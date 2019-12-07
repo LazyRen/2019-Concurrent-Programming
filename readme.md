@@ -2,7 +2,7 @@
 
 [![GitHub issue author](https://img.shields.io/badge/author-Dae%20In%20Lee-blue.svg)](https://github.com/LazyRen)
 
-Projects for the 2019 Hanyang Univ. Concurrent Programming Course taught by Professor Jung, Hyung Soo.
+Projects for the 2019 Hanyang Univ. *Concurrent Programming Course* taught by Professor Jung, Hyung Soo.
 
 
 
