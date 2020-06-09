@@ -378,7 +378,7 @@ Storage: Samsung 860 EVO 1TB<br>
 
 ###### Chart
 
-![Buffer Pool Initialization Time](./assets/Buffer Pool Initialization Time.png)
+![Buffer Pool Initialization Time](./assets/Buffer%20Pool%20Initialization%20Time.png)
 
 As you can clearly see from the chart, multi thread completes initialization much faster.<br>
 And performance gap between concurrent / sequential initialization gets bigger as the buffer pool size increases.<br>So if hardware supports multi-core & large memory, it would be better to use concurrent buffer pool initialization to save some time in a boot up scenario.
