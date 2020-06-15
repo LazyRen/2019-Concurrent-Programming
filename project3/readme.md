@@ -170,7 +170,7 @@ public:
 };
 ```
 
-The detail of concurrency validation is posted on textbook, so I will only cover what has been added.<br>Dynamic memory allocation is minimized as much as possible. Only memory allocation happens within `scan()` when it succeeded capturing clean snapshot. It may *borrow* the snapshot from other thread's `update()` wich makes this structure *wait-free*.<br>
+The detail of concurrency validation is posted on textbook, so I will only cover what has been added.<br>Dynamic memory allocation is minimized as much as possible. Memory allocation only happens within `scan()` when it succeeded capturing clean snapshot. It may *borrow* the snapshot from other thread's `update()` wich makes this structure *wait-free*.<br>
 
 ###### Adding Garbage Object
 
